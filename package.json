@@ -1,0 +1,27 @@
+{
+  "name": "opencode-model-pricing",
+  "version": "1.0.0",
+  "description": "OpenCode plugin: list input/output/cache prices and Artificial Analysis Intelligence Index scores per model in /models. Prices come from the live model registry, scores are fetched from artificialanalysis.ai before each session.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "pricing",
+    "artificial-analysis",
+    "intelligence-index"
+  ],
+  "license": "MIT"
+}
