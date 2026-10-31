@@ -64,23 +64,34 @@ export function formatCost(cost: readonly CostTier[] | undefined): FormattedPric
   return (cost ?? []).map((tier, index, all) => formatTier(tier, index, all))
 }
 
+/** How the per-model cost line is rendered in `/models`. */
+export type CostFormat = "detailed" | "compact"
+
 /**
  * Compact per-model line used to decorate the model's display name so the
  * built-in `/models` picker lists input, output and cache prices plus the
  * Artificial Analysis intelligence score:
  *
- *   "GPT 6 Astra · in $10 out $50 · cache read $1 write $12.5 · AA 56.9"
- *   "Big Pickle · free · AA n/a"
+ *   detailed: "GPT 6 Astra · in $10 out $50 · cache read $1 write $12.5 · AA 56.9"
+ *   compact:  "GPT 6 Astra · $10/$50/$1/$12.5 · AA 56.9"
+ *   free:     "Big Pickle · free · AA n/a"
  *
- * Multi-tier models show their base tier and a marker pointing at the
- * `/model-pricing` command, which lists every tier.
+ * The compact form (<in>/<out>/<read>/<write>) keeps rows readable on narrow
+ * screens such as mobile web sessions. Multi-tier models show their base tier
+ * and a marker pointing at the `/model-pricing` command, which lists every
+ * tier.
  */
-export function pricingSegment(cost: readonly CostTier[] | undefined): string {
+export function pricingSegment(
+  cost: readonly CostTier[] | undefined,
+  format: CostFormat = "detailed",
+): string {
   const tiers = formatCost(cost)
   const base = tiers[0]
-  if (!base) return "pricing n/a"
+  if (!base) return format === "compact" ? "n/a" : "pricing n/a"
   if (base.free && tiers.every((tier) => tier.free)) return "free"
-  let segment = `in ${base.input} out ${base.output} · cache read ${base.cacheRead} write ${base.cacheWrite}`
-  if (tiers.length > 1) segment += ` (${tiers.length} tiers)`
-  return segment
+  const tierSuffix = tiers.length > 1 ? ` (${tiers.length} tiers)` : ""
+  if (format === "compact") {
+    return `${base.input}/${base.output}/${base.cacheRead}/${base.cacheWrite}${tierSuffix}`
+  }
+  return `in ${base.input} out ${base.output} · cache read ${base.cacheRead} write ${base.cacheWrite}${tierSuffix}`
 }

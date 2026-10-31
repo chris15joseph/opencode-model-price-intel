@@ -54,6 +54,7 @@ from `opencode.json(c)`:
       "package": "/path/to/opencode-model-pricing",
       "options": {
         "decorateNames": true,
+        "costFormat": "compact",
         "aaApiKey": "{env:ARTIFICIALANALYSIS_API_KEY}",
         "refreshHours": 12,
       },
@@ -67,6 +68,7 @@ from `opencode.json(c)`:
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `decorateNames` | `true` | Attach the pricing/score line to model names in `/models` |
+| `costFormat` | `"detailed"` | Cost line format: `detailed` (`in $10 out $50 · cache read $1 write $12.5`) or `compact` (`$10/$50/$1/$12.5` = `<in>/<out>/<read>/<write>` — keeps rows readable on narrow screens such as mobile web sessions) |
 | `aaApiKey` | – | Artificial Analysis Data API key (else `ARTIFICIALANALYSIS_API_KEY`, else public pages) |
 | `refreshHours` | `12` | Score cache TTL and in-session refresh interval |
 

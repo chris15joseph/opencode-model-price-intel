@@ -33,12 +33,13 @@
 
 import { Plugin } from "@opencode/plugin"
 import { fetchAAScores, lookupScore, snapshotScores, type AAFetched } from "./aa.ts"
-import { formatCost, pricingSegment } from "./pricing.ts"
+import { formatCost, pricingSegment, type CostFormat } from "./pricing.ts"
 
 const CACHE_KEY = "aa-scores/v2"
 
 interface Options {
   decorateNames?: boolean
+  costFormat?: "detailed" | "compact"
   aaApiKey?: string
   refreshHours?: number
 }
@@ -48,6 +49,7 @@ export default Plugin.define({
   async setup(ctx) {
     const options = (ctx.options ?? {}) as Options
     const decorateNames = options.decorateNames !== false
+    const costFormat: CostFormat = options.costFormat === "compact" ? "compact" : "detailed"
     const refreshMs = Math.max(1, options.refreshHours ?? 12) * 3_600_000
 
     let aa: AAFetched = snapshotScores()
@@ -78,7 +80,7 @@ export default Plugin.define({
         for (const model of editor.list()) {
           const score = lookupScore(aa.scores, model.id, model.name)
           const aaSegment = score?.score != null ? `AA ${Math.round(score.score * 10) / 10}` : "AA n/a"
-          model.name = `${model.name} · ${pricingSegment(model.cost)} · ${aaSegment}`
+          model.name = `${model.name} · ${pricingSegment(model.cost, costFormat)} · ${aaSegment}`
         }
       })
     }

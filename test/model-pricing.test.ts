@@ -65,6 +65,22 @@ test("pricingSegment renders the /models line", () => {
   assert.equal(pricingSegment(undefined), "pricing n/a")
 })
 
+test("pricingSegment compact format reads <in>/<out>/<read>/<write>", () => {
+  assert.equal(
+    pricingSegment([{ input: 0.4, output: 0.5, cache: { read: 0.01, write: 0.05 } }], "compact"),
+    "$0.4/$0.5/$0.01/$0.05",
+  )
+  assert.equal(
+    pricingSegment([{ input: 10, output: 50, cache: { read: 1, write: 12.5 } }], "compact"),
+    "$10/$50/$1/$12.5",
+  )
+  // free models and gaps stay short
+  assert.equal(pricingSegment([{ input: 0, output: 0, cache: { read: 0, write: 0 } }], "compact"), "free")
+  assert.equal(pricingSegment(undefined, "compact"), "n/a")
+  // multi-tier models show the base tier plus a marker
+  assert.equal(pricingSegment(gpt54Tiers, "compact"), "$2.5/$15/$0.25/$0 (2 tiers)")
+})
+
 // ------------------------------------------------------------ AA parsing
 
 test("decodeRSC decodes self.__next_f.push payloads", () => {
