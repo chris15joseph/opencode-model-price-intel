@@ -102,12 +102,21 @@ export function parseAARecords(decoded: string): AARecord[] {
   return [...records.values()]
 }
 
-/** Strip parenthesized qualifiers: "GPT-6 Astra (Max)" -> "gpt6astra". */
+/**
+ * Normalize a model name or ID into a comparison key.
+ *
+ * Parenthesized qualifiers ("(Max)"), the OpenCode "Free" tier marker
+ * ("GLM-5.3-Flash Free", "glm-5.3-flash-free" -> "glm53flash"), and all
+ * punctuation are removed so an OpenCode catalog entry finds its Artificial
+ * Analysis counterpart.
+ */
 export function matchKey(nameOrId: string): string {
   return nameOrId
     .toLowerCase()
     .replace(/\(.*?\)/g, "")
+    .replace(/\bfree\b/g, "")
     .replace(/[^a-z0-9]/g, "")
+    .replace(/free$/, "")
 }
 
 /** Prefer the highest-effort variant of a model when AA scores several. */
@@ -170,24 +179,49 @@ export function lookupScore(
 ): AAScore | undefined {
   const keys = [matchKey(modelID), matchKey(modelName)].filter((key) => key.length > 0)
   const exact = keys.map((key) => index[key]).filter(Boolean)
-  const suffixed: AAScore[] = []
+  const suffixed: { suffix: string; entry: AAScore }[] = []
   for (const key of keys) {
-    if (key.length < 6) continue
+    if (key.length < 4) continue
     for (const [candidate, entry] of Object.entries(index)) {
       if (!candidate.startsWith(key)) continue
       const suffix = candidate.slice(key.length)
-      if (suffix !== "" && !/^\d{3,4}$/.test(suffix)) continue
-      if (suffix !== "") suffixed.push(entry)
+      if (!/^\d{1,4}$/.test(suffix)) continue
+      // A trailing version ("Beam 1.0" -> "beam10" for "beam") is only trusted
+      // when the model's own key does not end in digits: "GLM 5" ("glm5") must
+      // never pick up "GLM 5.1"'s ("glm51") score.
+      if (!/[a-z]$/.test(key) && suffix.length < 3) continue
+      suffixed.push({ suffix, entry })
     }
   }
-  // Prefer real scores: exact match first, then a checkpoint variant
+  suffixed.sort((a, b) => a.suffix.length - b.suffix.length)
+  // Prefer real scores: exact match first, then a checkpoint/version variant
   // ("DeepSeek V4.1 Flash 1017" scoring "DeepSeek V4.1 Flash"). An unscored
   // exact entry is only returned when nothing carries a score at all.
   return (
     exact.find((entry) => entry!.score != null) ??
-    suffixed.find((entry) => entry.score != null) ??
+    suffixed.find(({ entry }) => entry.score != null)?.entry ??
     exact[0]
   )
+}
+
+/**
+ * The bundled snapshot was keyed with `matchKey`; re-normalize defensively so
+ * entries like "glm53flashfree" merge onto "glm53flash". Non-null scores win
+ * when duplicate keys merge.
+ */
+let normalizedSnapshot: Record<string, AAScore> | undefined
+function snapshotIndex(): Record<string, AAScore> {
+  if (normalizedSnapshot) return normalizedSnapshot
+  const out: Record<string, AAScore> = {}
+  for (const [key, entry] of Object.entries(AA_SNAPSHOT)) {
+    const normalized = matchKey(key) || key
+    const existing = out[normalized]
+    if (!existing || (existing.score == null && entry.score != null)) {
+      out[normalized] = entry
+    }
+  }
+  normalizedSnapshot = out
+  return out
 }
 
 /**
@@ -197,7 +231,7 @@ export function lookupScore(
  */
 export function withSnapshotFallback(index: Readonly<Record<string, AAScore>>): Record<string, AAScore> {
   const merged: Record<string, AAScore> = { ...index }
-  for (const [key, entry] of Object.entries(AA_SNAPSHOT)) {
+  for (const [key, entry] of Object.entries(snapshotIndex())) {
     const live = merged[key]
     if (live && live.score != null) continue
     if (live && entry.score == null) continue
@@ -310,7 +344,7 @@ export async function fetchAAScores(options?: {
 /** Snapshot fallback used when live fetching fails. */
 export function snapshotScores(): AAFetched {
   return {
-    scores: AA_SNAPSHOT,
+    scores: snapshotIndex(),
     version: AA_INDEX_VERSION,
     source: "bundled snapshot (artificialanalysis.ai, 2026-10-31)",
     fetchedAt: new Date().toISOString(),

@@ -129,6 +129,36 @@ test("lookupScore matches by model ID, name, and checkpoint suffix — never sib
   assert.equal(lookupScore(index, "qwen3.8-flash", "Qwen3.8 Flash"), undefined)
 })
 
+test("matchKey ignores the OpenCode 'Free' tier marker", () => {
+  assert.equal(matchKey("GLM-5.3-Flash Free"), "glm53flash")
+  assert.equal(matchKey("glm-5.3-flash-free"), "glm53flash")
+  assert.equal(matchKey("GLM-5.3-Flash"), "glm53flash")
+  assert.equal(matchKey("Beam Free"), "beam")
+  assert.equal(matchKey("DeepSeek V4.1 Flash Free"), "deepseekv41flash")
+  // "free" only counts as the tier marker, not inside other words
+  assert.equal(matchKey("Freedom Model"), "freedommodel")
+})
+
+test("free-tier models find their Artificial Analysis entry", () => {
+  const index = {
+    glm53flash: { score: 27.8, name: "GLM 5.3 Flash" },
+    deepseekv41flash: { score: null, name: "DeepSeek V4.1 Flash" },
+    deepseekv41flash1017: { score: 32.5, name: "DeepSeek V4.1 Flash 1017 (Max)" },
+    beam10: { score: 17.7, name: "Beam 1.0" },
+    mimov26flash: { score: 26.7, name: "MiMo-V2.6-Flash" },
+    glm51: { score: 40.0, name: "GLM-5.1 (Max)" },
+  }
+  assert.equal(lookupScore(index, "glm-5.3-flash-free", "GLM-5.3-Flash Free")?.score, 27.8)
+  assert.equal(lookupScore(index, "mimo-v2.6-flash-free", "MiMo-V2.6-Flash Free")?.score, 26.7)
+  // free variant of an unscored model still finds the scored checkpoint
+  assert.equal(lookupScore(index, "deepseek-v4.1-flash-free", "DeepSeek V4.1 Flash Free")?.score, 32.5)
+  // "Beam Free" -> "beam" matches AA's versioned "Beam 1.0" entry
+  assert.equal(lookupScore(index, "beam-free", "Beam Free")?.score, 17.7)
+  // ...but digit-ending keys must never absorb a sibling version's score
+  assert.equal(lookupScore(index, "glm-5", "GLM 5"), undefined)
+  assert.equal(lookupScore(index, "glm-5.1", "GLM 5.1")?.score, 40.0)
+})
+
 test("snapshot fallback covers the catalog", () => {
   const snapshot = snapshotScores()
   assert.ok(Object.keys(snapshot.scores).length > 50)
