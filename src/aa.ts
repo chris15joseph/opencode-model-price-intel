@@ -183,15 +183,19 @@ export function lookupScore(
 }
 
 /**
- * Use the bundled snapshot to fill gaps the live data does not cover (AA only
- * publishes scores for some models). Live entries always win.
+ * Use the bundled snapshot to fill gaps the live data does not cover: AA only
+ * publishes scores for some models, and some live records carry `null` even
+ * though a score exists elsewhere on the site. Live non-null scores always win.
  */
 export function withSnapshotFallback(index: Readonly<Record<string, AAScore>>): Record<string, AAScore> {
   const merged: Record<string, AAScore> = { ...index }
   for (const [key, entry] of Object.entries(AA_SNAPSHOT)) {
-    if (merged[key]) continue
+    const live = merged[key]
+    if (live && live.score != null) continue
+    if (live && entry.score == null) continue
     merged[key] = {
-      ...entry,
+      score: entry.score,
+      name: live?.name ?? entry.name,
       note: entry.note ? `${entry.note} [snapshot]` : "[snapshot]",
     }
   }

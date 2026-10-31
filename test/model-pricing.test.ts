@@ -141,12 +141,18 @@ test("snapshot fallback covers the catalog", () => {
 test("withSnapshotFallback fills gaps live data does not cover", () => {
   const merged = withSnapshotFallback({
     glm53: { score: 31.7, name: "GLM-5.3 (Max)" },
+    gemini4argon: { score: null, name: "Gemini 4 Argon (High)" },
   })
-  // live entry wins
+  // live non-null entry wins
   assert.equal(merged.glm53.score, 31.7)
-  // snapshot fills gaps, marked as such
+  // snapshot fills missing entries, marked as such
+  const flash = lookupScore(merged, "glm-5.3-flash", "GLM-5.3-Flash")
+  assert.ok(flash?.score != null && Math.abs(flash.score - 27.8) < 0.1)
+  assert.match(flash.note ?? "", /snapshot/)
+  // snapshot fills live entries whose score is null
   const argon = lookupScore(merged, "gemini-4-argon", "Gemini 4 Argon")
   assert.ok(argon?.score != null && Math.abs(argon.score - 50.4) < 0.1)
+  assert.equal(argon.name, "Gemini 4 Argon (High)") // live name kept
   assert.match(argon.note ?? "", /snapshot/)
 })
 
