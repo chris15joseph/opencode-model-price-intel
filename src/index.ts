@@ -35,7 +35,7 @@ import { Plugin } from "@opencode/plugin"
 import { fetchAAScores, lookupScore, snapshotScores, type AAFetched } from "./aa.ts"
 import { formatCost, pricingSegment } from "./pricing.ts"
 
-const CACHE_KEY = "aa-scores/v1"
+const CACHE_KEY = "aa-scores/v2"
 
 interface Options {
   decorateNames?: boolean
