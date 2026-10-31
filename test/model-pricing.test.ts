@@ -115,6 +115,12 @@ test("lookupScore matches by model ID, name, and checkpoint suffix — never sib
   assert.equal(lookupScore(index, "gpt-6-astra", "GPT 6 Astra")?.score, 56.9)
   // checkpoint suffix is fine
   assert.equal(lookupScore(index, "deepseek-v4.1-flash", "DeepSeek V4.1 Flash")?.score, 32.5)
+  // an unscored exact entry must not shadow a scored checkpoint variant
+  const withNullExact = {
+    ...index,
+    deepseekv41flash: { score: null, name: "DeepSeek V4.1 Flash" },
+  }
+  assert.equal(lookupScore(withNullExact, "deepseek-v4.1-flash", "DeepSeek V4.1 Flash")?.score, 32.5)
   // siblings must NOT borrow each other's scores
   assert.equal(lookupScore(index, "kimi-k3", "Kimi K3"), undefined)
   assert.equal(lookupScore(index, "glm-5.3-flash", "GLM-5.3-Flash"), undefined)

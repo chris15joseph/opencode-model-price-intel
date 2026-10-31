@@ -168,18 +168,26 @@ export function lookupScore(
   modelID: string,
   modelName: string,
 ): AAScore | undefined {
-  for (const key of [matchKey(modelID), matchKey(modelName)]) {
-    if (key && index[key]) return index[key]
-  }
-  for (const key of [matchKey(modelID), matchKey(modelName)]) {
+  const keys = [matchKey(modelID), matchKey(modelName)].filter((key) => key.length > 0)
+  const exact = keys.map((key) => index[key]).filter(Boolean)
+  const suffixed: AAScore[] = []
+  for (const key of keys) {
     if (key.length < 6) continue
     for (const [candidate, entry] of Object.entries(index)) {
       if (!candidate.startsWith(key)) continue
       const suffix = candidate.slice(key.length)
-      if (suffix === "" || /^\d{3,4}$/.test(suffix)) return entry
+      if (suffix !== "" && !/^\d{3,4}$/.test(suffix)) continue
+      if (suffix !== "") suffixed.push(entry)
     }
   }
-  return undefined
+  // Prefer real scores: exact match first, then a checkpoint variant
+  // ("DeepSeek V4.1 Flash 1017" scoring "DeepSeek V4.1 Flash"). An unscored
+  // exact entry is only returned when nothing carries a score at all.
+  return (
+    exact.find((entry) => entry!.score != null) ??
+    suffixed.find((entry) => entry.score != null) ??
+    exact[0]
+  )
 }
 
 /**
