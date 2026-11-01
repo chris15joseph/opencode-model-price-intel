@@ -94,6 +94,19 @@ Scrolling rows are sized to the real available space, not a fixed guess:
 - Width reports expire after 5 minutes, so a closed narrow terminal does not
   keep rows short forever.
 
+### Scrolling vs. client scroll position (web UI)
+
+Each marquee repaint is a model-list data update. The terminal UI handles that
+fine, but the stock **web UI resets a list's vertical scroll position when its
+data refreshes** — so server-driven scrolling and a stable scroll position are
+mutually exclusive there, and plugins cannot change the web UI's rendering.
+
+To get continuous scrolling **and** a stable scroll position in the web UI,
+install the companion browser script in `extras/web-scroll-keeper.ts`
+(bookmarklet form included in its header): it restores your scroll position
+whenever a re-render resets it to the top. With it installed, set
+`"scrollPauseMs": 0` for continuous scrolling.
+
 ## Commands
 
 | Command | Effect |
