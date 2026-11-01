@@ -4,7 +4,9 @@
   "description": "OpenCode plugin: list input/output/cache prices and Artificial Analysis Intelligence Index scores per model in /models. Prices come from the live model registry, scores are fetched from artificialanalysis.ai before each session.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts",
+    "./tui": "./src/tui.ts"
   },
   "files": [
     "src",

@@ -69,8 +69,30 @@ from `opencode.json(c)`:
 | --- | --- | --- |
 | `decorateNames` | `true` | Attach the pricing/score line to model names in `/models` |
 | `costFormat` | `"detailed"` | Cost line format: `detailed` (`in $10 out $50 · cache read $1 write $12.5`) or `compact` (`$10/$50/$1/$12.5` = `<in>/<out>/<read>/<write>` — keeps rows readable on narrow screens such as mobile web sessions) |
+| `scroll` | `false` | Turn rows wider than the available space into scrolling marquee text (the model name stays pinned; the detail slides and wraps) |
+| `scrollWidth` | `40` | Maximum row width in characters. Acts as a **ceiling**: clients that report their viewport (terminals do automatically, see below) narrow the rows further, down to what they actually have |
+| `scrollIntervalMs` | `500` | Marquee tick interval |
+| `scrollStep` | `3` | Characters advanced per tick (3 per 500 ms ≈ 6 chars/s) |
+| `scrollBurstMs` | `6000` | How long each scroll burst lasts |
+| `scrollPauseMs` | `20000` | Rest between bursts. The rows are static during the rest — no repaints — so client lists keep their scroll position while you browse. `0` scrolls continuously |
 | `aaApiKey` | – | Artificial Analysis Data API key (else `ARTIFICIALANALYSIS_API_KEY`, else public pages) |
 | `refreshHours` | `12` | Score cache TTL and in-session refresh interval |
+
+### Dynamic row width
+
+Scrolling rows are sized to the real available space, not a fixed guess:
+
+- **Terminal sessions** — the bundled TUI part reports its terminal width to the
+  server automatically (and re-reports on resize) over the plugin's `viewport`
+  RPC. Rows re-flow live when you resize.
+- **Anything else** (web clients, scripts) — the same RPC is exposed over HTTP
+  as `POST /api/rpc/model-pricing/viewport` with body
+  `{"input": {"client": "my-phone", "width": 32}}`; it returns the effective
+  width. The stock OpenCode web app does not report its viewport yet, so for
+  web-only sessions set `scrollWidth` to your screen's row width (as a ceiling
+  for everyone).
+- Width reports expire after 5 minutes, so a closed narrow terminal does not
+  keep rows short forever.
 
 ## Commands
 

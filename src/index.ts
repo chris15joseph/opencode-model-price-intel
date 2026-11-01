@@ -34,12 +34,33 @@
 import { Plugin } from "@opencode/plugin"
 import { fetchAAScores, lookupScore, snapshotScores, type AAFetched } from "./aa.ts"
 import { formatCost, pricingSegment, type CostFormat } from "./pricing.ts"
+import { isScrolling, marqueePhase, renderRow } from "./scroll.ts"
+import { ModelPricingRpc } from "./rpc.ts"
 
 const CACHE_KEY = "aa-scores/v2"
 
 interface Options {
   decorateNames?: boolean
   costFormat?: "detailed" | "compact"
+  /** Marquee rows that exceed the available width instead of clipping them. */
+  scroll?: boolean
+  /**
+   * Maximum row width in characters. Live viewport reports (TUI terminals
+   * report automatically via RPC) narrow this further; the option acts as a
+   * ceiling that protects clients which cannot report their width.
+   */
+  scrollWidth?: number
+  /** Marquee tick interval in milliseconds. */
+  scrollIntervalMs?: number
+  /** Characters advanced per marquee tick. */
+  scrollStep?: number
+  /**
+   * How long a scroll burst lasts. Between bursts the rows are static (no
+   * repaints), so client lists keep their scroll position while you browse.
+   */
+  scrollBurstMs?: number
+  /** Rest between bursts. `0` scrolls continuously. */
+  scrollPauseMs?: number
   aaApiKey?: string
   refreshHours?: number
 }
@@ -50,7 +71,35 @@ export default Plugin.define({
     const options = (ctx.options ?? {}) as Options
     const decorateNames = options.decorateNames !== false
     const costFormat: CostFormat = options.costFormat === "compact" ? "compact" : "detailed"
+    const scroll = options.scroll === true
+    const scrollWidth = Math.max(16, options.scrollWidth ?? 40)
+    const scrollIntervalMs = Math.max(100, options.scrollIntervalMs ?? 500)
+    const scrollStep = Math.max(1, options.scrollStep ?? 3)
+    const scrollBurstMs = Math.max(scrollIntervalMs, options.scrollBurstMs ?? 6_000)
+    const scrollPauseMs = Math.max(0, options.scrollPauseMs ?? 20_000)
     const refreshMs = Math.max(1, options.refreshHours ?? 12) * 3_600_000
+
+    let scrollOffset = 0
+    let scrollingActive = false
+
+    // Live viewports reported by clients (TUI terminals report automatically
+    // through the `viewport` RPC). Stale reports expire so a closed narrow
+    // terminal does not keep rows short forever.
+    const viewports = new Map<string, { width: number; at: number }>()
+    const VIEWPORT_TTL_MS = 5 * 60_000
+
+    function effectiveWidth(): number {
+      const cutoff = Date.now() - VIEWPORT_TTL_MS
+      let width = scrollWidth
+      for (const [client, report] of viewports) {
+        if (report.at < cutoff) {
+          viewports.delete(client)
+          continue
+        }
+        width = Math.min(width, report.width)
+      }
+      return Math.max(16, width)
+    }
 
     let aa: AAFetched = snapshotScores()
 
@@ -75,13 +124,37 @@ export default Plugin.define({
     // loads plugins for the session, i.e. before the coding session begins.
     await loadAA(false)
 
+    // Viewport reports size the scrolling rows to the real available space.
+    let lastWidth = effectiveWidth()
+    const rpcRegistration = await ctx.rpc.register(ModelPricingRpc, {
+      viewport: async (input) => {
+        const { client = "anonymous", width } = input as { client?: string; width: number }
+        viewports.set(client, { width, at: Date.now() })
+        const next = effectiveWidth()
+        if (next !== lastWidth) {
+          lastWidth = next
+          void ctx.model.reload().catch(() => {})
+        }
+        return { width: next }
+      },
+    })
+
     if (decorateNames) {
       await ctx.model.transform((editor) => {
+        let anyScrolling = false
+        const width = effectiveWidth()
         for (const model of editor.list()) {
           const score = lookupScore(aa.scores, model.id, model.name)
           const aaSegment = score?.score != null ? `AA ${Math.round(score.score * 10) / 10}` : "AA n/a"
-          model.name = `${model.name} · ${pricingSegment(model.cost, costFormat)} · ${aaSegment}`
+          const suffix = `${pricingSegment(model.cost, costFormat)} · ${aaSegment}`
+          if (scroll && isScrolling(model.name, suffix, width)) {
+            anyScrolling = true
+            model.name = renderRow(model.name, suffix, scrollOffset, width)
+          } else {
+            model.name = `${model.name} · ${suffix}`
+          }
         }
+        scrollingActive = anyScrolling
       })
     }
 
@@ -104,7 +177,10 @@ export default Plugin.define({
           "| --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for (const model of models) {
-          const score = lookupScore(aa.scores, model.id, model.name)
+          // `model.name` may carry the decoration/scroll window; the base name
+          // is the part before the first " · ".
+          const baseName = model.name.split(" · ")[0]
+          const score = lookupScore(aa.scores, model.id, baseName)
           const aaCell =
             score?.score != null
               ? `${Math.round(score.score * 10) / 10}${score.note ? ` (${score.note})` : ""}`
@@ -122,7 +198,7 @@ export default Plugin.define({
                 ]
               : ["", "n/a", "n/a", "n/a", "n/a"]
             lines.push(
-              `| ${index === 0 ? model.name : ""} | ${index === 0 ? model.providerID : ""} | ${cells[0] || "base"} | ${cells[1]} | ${cells[2]} | ${cells[3]} | ${cells[4]} | ${index === 0 ? aaCell : ""} |`,
+              `| ${index === 0 ? baseName : ""} | ${index === 0 ? model.providerID : ""} | ${cells[0] || "base"} | ${cells[1]} | ${cells[2]} | ${cells[3]} | ${cells[4]} | ${index === 0 ? aaCell : ""} |`,
             )
           })
         }
@@ -150,6 +226,27 @@ export default Plugin.define({
         .catch((error) => console.error("[model-pricing] refresh failed:", error))
     }, refreshMs)
 
-    return () => clearInterval(timer)
+    // Marquee tick: advance the window offset and repaint — in bursts. Between
+    // bursts the rows settle at their head frame (model name first) and the
+    // registry is left untouched, so client lists keep their scroll position.
+    let burstEndsAt = Date.now() + scrollBurstMs
+    const scrollTimer = setInterval(() => {
+      if (!scroll || !scrollingActive) return
+      const phase = marqueePhase(Date.now(), burstEndsAt, scrollBurstMs, scrollPauseMs)
+      burstEndsAt = phase.burstEndsAt
+      if (phase.action === "advance") {
+        scrollOffset = (scrollOffset + scrollStep) % 100_000
+        void ctx.model.reload().catch((error) => console.error("[model-pricing] scroll tick failed:", error))
+      } else if (scrollOffset !== 0) {
+        scrollOffset = 0 // settle once at the head frame; no further repaints
+        void ctx.model.reload().catch((error) => console.error("[model-pricing] scroll tick failed:", error))
+      }
+    }, scrollIntervalMs)
+
+    return () => {
+      clearInterval(timer)
+      clearInterval(scrollTimer)
+      void rpcRegistration.dispose()
+    }
   },
 })
