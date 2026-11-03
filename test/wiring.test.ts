@@ -95,7 +95,7 @@ function apiFetch(
   records: () => ApiRecord[],
   onCall?: () => void,
 ): typeof fetch {
-  return (async (input: RequestInfo | URL) => {
+  return (async (input: string | URL | Request) => {
     onCall?.()
     const url = new URL(String(input))
     if (url.searchParams.get("page") !== "1") {
@@ -586,7 +586,7 @@ test("background refresh reloads only when the score data changed", async () => 
 test("in-flight guard prevents overlapping refreshes", async () => {
   let calls = 0
   let release: ((response: Response) => void) | undefined
-  const pendingFetch: typeof fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const pendingFetch: typeof fetch = ((input: string | URL | Request, init?: RequestInit) => {
     calls++
     if (calls > 1) return Promise.resolve(jsonResponse({ data: [] }))
     void input
@@ -631,7 +631,7 @@ test("in-flight guard prevents overlapping refreshes", async () => {
 
 test("cleanup clears the refresh timer and aborts in-flight work", async () => {
   let capturedSignal: AbortSignal | undefined
-  const hangingFetch: typeof fetch = ((_input: RequestInfo | URL, init?: RequestInit) => {
+  const hangingFetch: typeof fetch = ((_input: string | URL | Request, init?: RequestInit) => {
     capturedSignal = init?.signal ?? undefined
     return new Promise<Response>((_resolve, reject) => {
       const signal = init?.signal

@@ -606,8 +606,13 @@ async function fetchOnce(
     }, timeoutMs)
   })
   try {
+    // Preserve a caller-provided signal (plugin cleanup) while still applying
+    // this attempt's own timeout controller.
+    const signal = init.signal
+      ? AbortSignal.any([init.signal, controller.signal])
+      : controller.signal
     return await Promise.race([
-      fetchImpl(input, { ...init, signal: controller.signal }),
+      fetchImpl(input, { ...init, signal }),
       timeout,
     ])
   } finally {

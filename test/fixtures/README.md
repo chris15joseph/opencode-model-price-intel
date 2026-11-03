@@ -14,7 +14,18 @@ package by the `files` allowlist in `package.json`.
 | Third-party data | Artificial Analysis Intelligence Index (v5.0) |
 | Attribution / terms | https://artificialanalysis.ai/ and https://artificialanalysis.ai/terms |
 
-The fixture is public benchmark/model data only. It contains no API keys,
+## `aa-company-aggregates.txt`
+
+| Field | Value |
+| --- | --- |
+| Source | https://artificialanalysis.ai/ model/evaluations payload (company aggregate rows) |
+| Content | Company aggregate records (Google, Anthropic, OpenAI, Meta, Kimi, …) that must never be treated as models |
+| Captured | 2026-11-02 |
+| Captured for | `test/model-pricing.test.ts` company-row filtering tests |
+| Third-party data | Artificial Analysis Intelligence Index (v5.0) |
+| Attribution / terms | https://artificialanalysis.ai/ and https://artificialanalysis.ai/terms |
+
+Both fixtures are public benchmark/model data only. They contain no API keys,
 account data, or other secrets. Do not add captured responses that include
 credentials or private account information.
 

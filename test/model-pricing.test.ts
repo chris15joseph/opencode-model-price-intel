@@ -56,7 +56,7 @@ function pageResponse(decoded: string): Response {
 }
 
 function fakeFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response>): typeof fetch {
-  return (async (input: RequestInfo | URL, init?: RequestInit) =>
+  return (async (input: string | URL | Request, init?: RequestInit) =>
     handler(String(input), init)) as typeof fetch
 }
 
