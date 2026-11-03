@@ -1,0 +1,37 @@
+NOTICE
+======
+
+Artificial Analysis data
+------------------------
+
+This package bundles a fallback snapshot of the Artificial Analysis Intelligence
+Index (v5.0) captured on 2026-10-31 from the public model pages at:
+
+  https://artificialanalysis.ai/
+
+At runtime the plugin prefers live data from the Artificial Analysis Data API
+(when a key is configured) or the public Artificial Analysis pages. The bundled
+snapshot is used only when live data and the plugin cache are unavailable.
+
+Intelligence Index scores and related model data are produced by Artificial
+Analysis. Attribution is provided in the plugin output and in this NOTICE.
+Use of Artificial Analysis data is subject to their terms:
+
+  https://artificialanalysis.ai/terms
+
+The snapshot is derived data and is not a substitute for the live Artificial
+Analysis service. Do not remove this NOTICE or the attribution when
+redistributing the package.
+
+Some source comments in `src/aa-snapshot.ts` record that individual scores were
+cross-checked against a third-party "llmcompare snapshot 2026-10-12". Those
+comments are retained for provenance/traceability only; the authoritative
+source and attribution for the bundled Intelligence Index data remains
+Artificial Analysis.
+
+Test fixtures
+-------------
+
+`test/fixtures/aa-payload.txt` is a capture of public Artificial Analysis model
+data used only by the repository test suite. Fixtures are not included in the
+published npm package. See `test/fixtures/README.md` for capture details.
