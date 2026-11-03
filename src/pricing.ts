@@ -7,12 +7,14 @@
  *
  * `Model.Cost` shape (OpenCode schema):
  *   {
- *     tier?: { type: "context", size: number }   // applies up to `size` context tokens
+ *     tier?: { type: "context", size: number }   // applies ABOVE `size` context tokens
  *     input: number                              // USD per 1M tokens
  *     output: number
  *     cache: { read: number, write: number }
  *   }
- * `Model.Info.cost` is an ARRAY of such entries (one per context-price tier).
+ * `Model.Info.cost` is an ARRAY of such entries: an untiered base price
+ * followed by zero or more context overrides. OpenCode selects the matching
+ * override when context tokens exceed `tier.size`.
  */
 
 export interface CostTier {
@@ -27,36 +29,80 @@ export interface FormattedPrice {
   output: string
   cacheRead: string
   cacheWrite: string
-  /** e.g. "≤272K" / ">272K" when the entry is context-tiered. */
+  /** e.g. ">32K" when the entry is a context-tier override. */
   tierLabel?: string
+  /** True only when input, output, cache read and cache write are all 0. */
   free: boolean
 }
 
-/** Format a USD-per-1M-token price compactly: 10 -> "$10", 0.006 -> "$0.006". */
+/** Expand exponent notation so prices never render as `1e+21`. */
+function plainDecimal(value: number): string {
+  const text = String(value)
+  const match = text.match(/^(-?)(\d+)(?:\.(\d+))?e([+-]?\d+)$/i)
+  if (!match) return text
+  const [, sign, whole, fraction = "", rawExponent] = match
+  const exponent = Number(rawExponent)
+  const digits = whole + fraction
+  if (exponent >= 0) {
+    const zeros = exponent - fraction.length
+    if (zeros >= 0) return `${sign}${digits}${"0".repeat(zeros)}`
+    const split = digits.length + zeros
+    return `${sign}${digits.slice(0, split)}.${digits.slice(split)}`
+  }
+  const zeros = -exponent - whole.length
+  if (zeros >= 0) return `${sign}0.${"0".repeat(zeros)}${digits}`
+  const split = whole.length + exponent
+  return `${sign}${whole.slice(0, split)}.${whole.slice(split)}${fraction}`
+}
+
+/**
+ * Format a USD-per-1M-token price, preserving published precision:
+ * 10 -> "$10", 0.006 -> "$0.006", 0.003625 -> "$0.003625".
+ * Prices below $0.00005 render explicitly as "<$0.00005"; negative or
+ * non-finite values render "?".
+ */
 export function usd(value: number): string {
-  if (!Number.isFinite(value)) return "?"
+  if (!Number.isFinite(value) || value < 0) return "?"
   if (value === 0) return "$0"
-  const rounded = Math.round(value * 10_000) / 10_000
-  return `$${String(rounded)}`
+  if (value < 0.00005) return "<$0.00005"
+  // Registry prices are exact JSON decimals; this only removes floating-point
+  // noise from arithmetic while keeping every published digit.
+  const normalized = value < 1 ? Math.round(value * 1e12) / 1e12 : value
+  let text = plainDecimal(normalized)
+  if (text.includes(".")) text = text.replace(/0+$/, "").replace(/\.$/, "")
+  return `$${text}`
 }
 
-function tierLabelFor(tier: CostTier, index: number, all: readonly CostTier[]): string | undefined {
-  if (!tier.tier) return undefined
-  // First tier caps at its own size; later tiers cover above the previous cap.
-  const size = index === 0 ? tier.tier.size : all[index - 1]?.tier?.size ?? tier.tier.size
-  const bound = size >= 1000 ? `${Math.round(size / 1000)}K` : String(size)
-  return index === 0 ? `≤${bound}` : `>${bound}`
+function contextBound(size: number): string {
+  if (Number.isFinite(size) && size >= 1_000 && size % 1_000 === 0) {
+    return `${size / 1_000}K`
+  }
+  return String(size)
 }
 
-export function formatTier(tier: CostTier, index = 0, all: readonly CostTier[] = [tier]): FormattedPrice {
-  const free = tier.input === 0 && tier.output === 0
+function tierLabelFor(tier: CostTier): string | undefined {
+  // An entry with tier.type === "context" applies ABOVE tier.size.
+  if (tier.tier?.type !== "context") return undefined
+  return `>${contextBound(tier.tier.size)}`
+}
+
+function isFree(tier: CostTier): boolean {
+  return (
+    tier.input === 0 &&
+    tier.output === 0 &&
+    (tier.cache?.read ?? 0) === 0 &&
+    (tier.cache?.write ?? 0) === 0
+  )
+}
+
+export function formatTier(tier: CostTier, _index = 0, _all: readonly CostTier[] = [tier]): FormattedPrice {
   return {
     input: usd(tier.input),
     output: usd(tier.output),
     cacheRead: usd(tier.cache?.read ?? 0),
     cacheWrite: usd(tier.cache?.write ?? 0),
-    tierLabel: tierLabelFor(tier, index, all),
-    free,
+    tierLabel: tierLabelFor(tier),
+    free: isFree(tier),
   }
 }
 
@@ -78,8 +124,8 @@ export type CostFormat = "detailed" | "compact"
  *
  * The compact form (<in>/<out>/<read>/<write>) keeps rows readable on narrow
  * screens such as mobile web sessions. Multi-tier models show their base tier
- * and a marker pointing at the `/model-pricing` command, which lists every
- * tier.
+ * and an `(N tiers)` marker; `/model-pricing` lists every tier with its `>N`
+ * context threshold.
  */
 export function pricingSegment(
   cost: readonly CostTier[] | undefined,
