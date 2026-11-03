@@ -2,12 +2,16 @@
  * Bundled snapshot of the Artificial Analysis Intelligence Index (v5.0).
  *
  * FALLBACK ONLY. The plugin fetches fresh scores from artificialanalysis.ai
- * every time OpenCode loads it (scores change as new evaluations land).
- * This snapshot (captured 2026-10-31) is used when the live fetch fails.
+ * when it refreshes (scores change as new evaluations land). This snapshot
+ * (captured 2026-10-31) is used when the live fetch fails, and only when the
+ * live index has the same major version.
  *
- * Keys are normalized via aa.ts `matchKey` (parenthesized qualifiers such as
- * "(Max)" are stripped and punctuation removed). Generated from the same
- * parser the live fetch uses.
+ * Canonical keys are `matchKey(name)` values: parenthesized qualifiers such as
+ * "(Max)" are stripped and punctuation removed. OpenCode catalog IDs whose
+ * digit order differs from the AA display name are documented in
+ * `AA_SNAPSHOT_ALIASES` (rather than being silent extra snapshot keys).
+ *
+ * Regenerate with `node scripts/regenerate-snapshot.ts`; see SNAPSHOT-NOTICE.md.
  *
  * Source: https://artificialanalysis.ai/ (Intelligence Index v5.0).
  * Attribution required by Artificial Analysis terms.
@@ -22,17 +26,32 @@ export interface AAScore {
   note?: string
 }
 
-export const AA_INDEX_VERSION = "5.0"
+export const AA_SNAPSHOT_VERSION = "5.0"
+/** Kept for callers that imported the original constant. */
+export const AA_INDEX_VERSION = AA_SNAPSHOT_VERSION
+export const AA_SNAPSHOT_DATE = "2026-10-31"
+/** Capture timestamp (UTC midnight on the capture date), not "now". */
+export const AA_SNAPSHOT_CAPTURED_AT = `${AA_SNAPSHOT_DATE}T00:00:00.000Z`
+
+/**
+ * Documented OpenCode-ID aliases -> canonical snapshot key.
+ *
+ * - `claude-haiku-4-5` normalizes to `claudehaiku45`, while AA's display name
+ *   "Claude 4.5 Haiku" normalizes to `claude45haiku`.
+ * - `claude-sonnet-4-5` has the same ID-order/name-order mismatch.
+ * - `muse-wonder-1.0` normalizes to `musewonder10`; the scored AA entry is
+ *   "Muse Wonder (Max)" (`musewonder`).
+ */
+export const AA_SNAPSHOT_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  claudehaiku45: "claude45haiku",
+  claudesonnet45: "claude45sonnet",
+  musewonder10: "musewonder",
+})
 
 export const AA_SNAPSHOT: Readonly<Record<string, AAScore>> = {
   "beam10": {
     score: 17.7307282547205,
     name: "Beam 1.0",
-  },
-  "beamreflectionbeam": {
-    score: 17.7,
-    name: "Beam (Reflection Beam)",
-    note: "v5.0 score; AA entry name: Beam 1.0. AA slug 'reflection-beam', display name 'Beam 1.0'.",
   },
   "bigpickle": {
     score: null,
@@ -49,10 +68,10 @@ export const AA_SNAPSHOT: Readonly<Record<string, AAScore>> = {
     name: "Claude Fable 5.1 (Max, Default Fallback)",
     note: "AA variant: (max, default fallback)",
   },
-  "claudehaiku45": {
+  "claude45haiku": {
     score: null,
     name: "Claude 4.5 Haiku",
-    note: "Not scored in v5.0. v4.2 score 22.5 (llmcompare snapshot 2026-10-12).",
+    note: "Not scored in v5.0. v4.2 score 22.5 (llmcompare snapshot 2026-10-12). OpenCode ID alias: claude-haiku-4-5.",
   },
   "claudehaiku55": {
     score: 36.2345435880142,
@@ -88,10 +107,10 @@ export const AA_SNAPSHOT: Readonly<Record<string, AAScore>> = {
     name: "Claude Opus 5.5 (Max, Default Fallback)",
     note: "AA variant: (max, default fallback)",
   },
-  "claudesonnet45": {
+  "claude45sonnet": {
     score: null,
     name: "Claude 4.5 Sonnet",
-    note: "Not scored in v5.0. v4.0-era score 43 (Reasoning, per AA Sonnet 4.6 article, Feb 2026).",
+    note: "Not scored in v5.0. v4.0-era score 43 (Reasoning, per AA Sonnet 4.6 article, Feb 2026). OpenCode ID alias: claude-sonnet-4-5.",
   },
   "claudesonnet46": {
     score: null,
@@ -435,11 +454,7 @@ export const AA_SNAPSHOT: Readonly<Record<string, AAScore>> = {
   "musewonder": {
     score: 43.3248225998431,
     name: "Muse Wonder (Max)",
-  },
-  "musewonder10": {
-    score: 43.3,
-    name: "Muse Wonder",
-    note: "v5.0 score; AA entry name: Muse Wonder (Max).",
+    note: "OpenCode ID alias: muse-wonder-1.0.",
   },
   "musewonderfull": {
     score: 49.7272123627021,
@@ -494,3 +509,7 @@ export const AA_SNAPSHOT: Readonly<Record<string, AAScore>> = {
     name: "Step 5 Preview",
   },
 }
+
+// The snapshot is shared process-wide; freeze it so accidental mutation cannot
+// change later lookups. `snapshotScores()` returns a frozen copy as well.
+Object.freeze(AA_SNAPSHOT)
