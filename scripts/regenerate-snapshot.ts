@@ -102,7 +102,7 @@ const lines: string[] = [
   " *",
   " * FALLBACK ONLY. Regenerate with `node scripts/regenerate-snapshot.ts`.",
   ` * Captured ${date}${partial ? " from the partial public model-list page" : " from the Free Data API"}.`,
-  " * See SNAPSHOT-NOTICE.md for provenance and attribution.",
+  " * See RELEASE.md for provenance and attribution.",
   " *",
   " * Canonical keys are `matchKey(name)` values; OpenCode ID-order aliases are",
   " * documented in AA_SNAPSHOT_ALIASES. Do not mix scores across major versions.",

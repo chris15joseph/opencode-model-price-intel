@@ -130,8 +130,9 @@ when displaying derived data:
 - The published package ships a `NOTICE` file with the same attribution and
   the snapshot provenance. Do not remove it when redistributing the package.
 
-See `NOTICE` and `SNAPSHOT-NOTICE.md` in the repository for provenance details.
-`SNAPSHOT-NOTICE.md` is a repository document, not part of the npm tarball.
+See `NOTICE` for the shipped attribution and provenance summary, and
+`RELEASE.md` for the snapshot rules, alias list, and regeneration commands.
+`RELEASE.md` is a repository document, not part of the npm tarball.
 
 ## Refresh and cache
 
@@ -247,8 +248,8 @@ the tarball contents, imports the packaged plugin, and, when `opencode` is
 available, loads it in a temporary OpenCode configuration.
 
 `npm pack` ships only `package.json`, `README.md`, `LICENSE`, `NOTICE`, and
-`src/`. Tests, fixtures, scripts, `CHANGELOG.md`, `RELEASE.md`, and
-`SNAPSHOT-NOTICE.md` are not included in the tarball.
+`src/`. Tests, fixtures, scripts, `CHANGELOG.md`, and `RELEASE.md` are not
+included in the tarball.
 
 ## Notes
 

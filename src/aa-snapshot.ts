@@ -11,7 +11,7 @@
  * digit order differs from the AA display name are documented in
  * `AA_SNAPSHOT_ALIASES` (rather than being silent extra snapshot keys).
  *
- * Regenerate with `node scripts/regenerate-snapshot.ts`; see SNAPSHOT-NOTICE.md.
+ * Regenerate with `node scripts/regenerate-snapshot.ts`; see RELEASE.md.
  *
  * Source: https://artificialanalysis.ai/ (Intelligence Index v5.0).
  * Attribution required by Artificial Analysis terms.
