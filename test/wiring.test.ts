@@ -11,6 +11,7 @@ import assert from "node:assert/strict"
 
 import plugin from "../src/index.ts"
 import { lookupScore, snapshotScores } from "../src/aa.ts"
+import { CACHE_KEY } from "../src/cache.ts"
 import { formatCost, type CostTier } from "../src/pricing.ts"
 
 const HOUR = 3_600_000
@@ -442,6 +443,13 @@ test("storage.set throwing keeps live data and does not log a fetch failure", as
     async (harness) => {
       await waitFor(() => harness.storage.sets >= 1, "cache write attempt")
       await waitFor(() => harness.reloads >= 1, "live data adoption")
+      assert.equal(harness.storage.setKeys[0], CACHE_KEY)
+      assert.deepEqual(Object.keys(harness.storage.setValues[0] as object), [
+        "scores",
+        "version",
+        "source",
+        "fetchedAt",
+      ])
 
       harness.models.push({
         id: "zeta-live-9000",
