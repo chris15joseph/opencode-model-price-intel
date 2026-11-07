@@ -14,8 +14,8 @@ the live index version has the same major version.
 | Attribution | <https://artificialanalysis.ai/> |
 
 Artificial Analysis requires attribution when API/page data is displayed. The
-plugin shows the source URL in the `/model-pricing` command table; the plugin
-README carries the same attribution.
+`/model-pricing` panel header carries the source URL and index version; the
+plugin README, `NOTICE`, and this file carry the same attribution.
 
 ## Snapshot rules
 

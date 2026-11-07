@@ -16,13 +16,17 @@
  *
  * Because the built-in `/models` picker renders `Model.Info.name` as the row
  * title, the pricing/score line is attached to the display name so `/models`
- * lists it per model. `/model-pricing` (alias `/prices`) prints the complete
- * table — every price tier, cache read/write, and the AA score — into the
- * session.
+ * lists it per model.
  *
  * Note: an experimental scrolling (marquee) mode for narrow screens existed
  * here and was removed — periodic name repaints made client lists reset their
  * scroll position (both the TUI and the web UI). Names are therefore static.
+ *
+ * The full table is exposed over RPC (`src/rpc.ts`). The TUI part
+ * (`src/tui.tsx`) adds `/model-pricing` and `/prices`, fetches structured rows
+ * from this server and renders them in a native dialog table. Keeping the
+ * command in the TUI avoids the old behavior where `ctx.session.synthetic`
+ * delivered the table to the model as a prompt instead of displaying it.
  *
  * Options (opencode.jsonc `plugins` entry):
  *   - decorateNames: boolean   attach the line to model names (default true)
@@ -34,9 +38,10 @@
  */
 
 import { Plugin } from "@opencode/plugin"
-import type { CommandInvocation } from "@opencode/plugin/promise/command"
 import { fetchAAScores, lookupScore, snapshotScores, type AAFetched } from "./aa.ts"
-import { formatCost, pricingSegment, type CostFormat, type CostTier } from "./pricing.ts"
+import { pricingSegment, type CostFormat } from "./pricing.ts"
+import { ModelPricing } from "./rpc.ts"
+import { pricingData, renderTable, type TableModel } from "./table.ts"
 
 const CACHE_KEY = "aa-scores/v3"
 const DEFAULT_REFRESH_HOURS = 12
@@ -53,15 +58,11 @@ interface ResolvedOptions {
   refreshMs: number
 }
 
-interface TableModel {
-  readonly id: string
-  readonly modelID?: string
+function modelKey(model: {
   readonly providerID: string
-  readonly name: string
-  readonly cost: readonly CostTier[] | undefined
-}
-
-function modelKey(model: TableModel): string {
+  readonly modelID?: string
+  readonly id: string
+}): string {
   return `${model.providerID}/${model.modelID || model.id}`
 }
 
@@ -218,63 +219,6 @@ function cachePayload(value: AAFetched): JsonValue {
   }
 }
 
-function markdownCell(value: unknown): string {
-  return String(value ?? "")
-    .replace(/\\/g, "\\\\")
-    .replace(/\|/g, "\\|")
-    .replace(/\r\n|\r|\n/g, " ")
-}
-
-function buildTable(
-  models: readonly TableModel[],
-  aa: AAFetched,
-  baseNames: ReadonlyMap<string, string>,
-  decorateNames: boolean,
-): string {
-  const lines: string[] = [
-    "### Model pricing & Artificial Analysis Intelligence Index",
-    "",
-    `Prices per 1M tokens from the live OpenCode model registry. Scores: Artificial Analysis Intelligence Index v${markdownCell(aa.version)}, source ${markdownCell(aa.source)}, fetched ${markdownCell(aa.fetchedAt.slice(0, 10))}. Attribution: https://artificialanalysis.ai/`,
-    "",
-    "| Model | Provider | Tier | Input | Output | Cache read | Cache write | AA Intelligence |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- |",
-  ]
-
-  for (const model of models) {
-    const baseName = decorateNames
-      ? (baseNames.get(modelKey(model)) ?? model.name)
-      : model.name
-    const score = lookupScore(aa.scores, model.id, baseName)
-    const aaCell =
-      score?.score != null
-        ? `${Math.round(score.score * 10) / 10}${score.note ? ` (${score.note})` : ""}`
-        : "n/a"
-
-    let tiers: ReturnType<typeof formatCost> = []
-    try {
-      tiers = formatCost(model.cost)
-    } catch (error) {
-      console.warn(`[model-price-intel] could not format cost for ${modelKey(model)}:`, error)
-    }
-    const rows = tiers.length > 0 ? tiers : [undefined]
-    rows.forEach((tier, index) => {
-      const cells = [
-        index === 0 ? baseName : "",
-        index === 0 ? model.providerID : "",
-        tier ? (tier.tierLabel ?? (index === 0 ? "base" : "")) : "base",
-        tier ? tier.input : "n/a",
-        tier ? tier.output : "n/a",
-        tier ? tier.cacheRead : "n/a",
-        tier ? tier.cacheWrite : "n/a",
-        index === 0 ? aaCell : "",
-      ]
-      lines.push(`| ${cells.map(markdownCell).join(" | ")} |`)
-    })
-  }
-
-  return lines.join("\n")
-}
-
 /** Remove our own decoration if a transform is replayed against a stale name. */
 function undecoratedName(name: string, price: string): string {
   const suffix = ` · ${price} · AA `
@@ -429,10 +373,10 @@ export default Plugin.define({
       })
     }
 
-    // Full table as a synthetic session message (no model call needed). The
-    // command is registered even when name decoration is disabled.
-    await ctx.command.transform((editor) => {
-      const execute = async (input: CommandInvocation): Promise<void> => {
+    // The TUI part calls this RPC to render the full table in a dialog. The
+    // server builds the rows because only it owns the live score cache.
+    await ctx.rpc.register(ModelPricing, {
+      table: async () => {
         let models: readonly TableModel[] = []
         try {
           const { data } = await ctx.model.list()
@@ -440,22 +384,9 @@ export default Plugin.define({
         } catch (error) {
           console.warn("[model-price-intel] could not list models for the pricing table:", error)
         }
-        await ctx.session.synthetic({
-          sessionID: input.sessionID,
-          text: buildTable(models, aa, baseNames, options.decorateNames),
-        })
-      }
-      editor.add({
-        name: "model-pricing",
-        description:
-          "List input/output/cache prices and Artificial Analysis intelligence scores for every model",
-        execute,
-      })
-      editor.add({
-        name: "prices",
-        description: "Alias of /model-pricing",
-        execute,
-      })
+        const data = pricingData(models, aa, baseNames, options.decorateNames)
+        return { ...data, text: renderTable(data) }
+      },
     })
 
     // Hydrate the cache and refresh live scores in the background. setup must

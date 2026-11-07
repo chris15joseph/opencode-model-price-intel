@@ -124,8 +124,7 @@ export type CostFormat = "detailed" | "compact"
  *
  * The compact form (<in>/<out>/<read>/<write>) keeps rows readable on narrow
  * screens such as mobile web sessions. Multi-tier models show their base tier
- * and an `(N tiers)` marker; the `/model-pricing` command lists every tier
- * with its `>N` context threshold.
+ * and an `(N tiers)` marker.
  */
 export function pricingSegment(
   cost: readonly CostTier[] | undefined,

@@ -1,10 +1,12 @@
 {
   "name": "opencode-model-price-intel",
   "version": "1.0.0",
-  "description": "OpenCode 2 plugin that adds input/output/cache prices and Artificial Analysis Intelligence Index scores to /models, plus a full /model-pricing table.",
+  "description": "OpenCode 2 plugin that adds input/output/cache prices and Artificial Analysis Intelligence Index scores to /models, plus a full /model-pricing TUI dialog.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts",
+    "./tui": "./src/tui.tsx"
   },
   "types": "./src/index.ts",
   "files": [
@@ -19,8 +21,16 @@
   "dependencies": {
     "@opencode/plugin": "2.2.5"
   },
+  "peerDependencies": {
+    "@opentui/core": ">=0.6.6",
+    "@opentui/solid": ">=0.6.6",
+    "solid-js": ">=1.9.0"
+  },
   "devDependencies": {
+    "@opentui/core": "^0.8.3",
+    "@opentui/solid": "^0.8.3",
     "@types/node": "22.20.5",
+    "solid-js": "^1.9.18",
     "typescript": "5.9.3"
   },
   "scripts": {

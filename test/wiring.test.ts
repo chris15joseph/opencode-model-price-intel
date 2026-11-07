@@ -2,16 +2,17 @@
  * Plugin wiring tests.
  *
  * These drive `src/index.ts` with a fake OpenCode plugin context and never
- * touch the real network. They cover the command envelope regression, storage
- * isolation, cache validation, refresh-interval clamping, background reloads
- * and cleanup/abort behavior.
+ * touch the real network. They cover model-name decoration, the pricing RPC,
+ * storage isolation, cache validation, refresh-interval clamping, background
+ * reloads and cleanup/abort behavior.
  */
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
 import plugin from "../src/index.ts"
 import { lookupScore, snapshotScores } from "../src/aa.ts"
-import { formatCost, type CostTier } from "../src/pricing.ts"
+import { type CostTier } from "../src/pricing.ts"
+import type { PricingTable } from "../src/rpc.ts"
 
 const HOUR = 3_600_000
 
@@ -44,12 +45,6 @@ interface ApiRecord {
   slug: string
   name: string
   score: number | null
-}
-
-interface CommandLike {
-  name: string
-  description?: string
-  execute: (input: { sessionID: string }) => Promise<void>
 }
 
 interface TimerCapture {
@@ -164,7 +159,6 @@ function captureLogs() {
 interface Harness {
   ctx: Record<string, unknown>
   models: FakeModel[]
-  commands: Map<string, CommandLike>
   storage: {
     gets: number
     sets: number
@@ -172,12 +166,12 @@ interface Harness {
     setValues: unknown[]
   }
   reloads: number
-  synthetic: string[]
   logs: { warn: string[]; error: string[]; log: string[] }
   timers: TimerCapture
   modelTransformCount: () => number
   applyModelTransform: () => void
-  invokeCommand: (name: string) => Promise<string>
+  invokeTableResult: () => Promise<PricingTable>
+  invokeTable: () => Promise<string>
   cleanup: () => Promise<void> | void
 }
 
@@ -221,12 +215,11 @@ async function createHarness(
     ...model,
     cost: model.cost.map((tier) => ({ ...tier, cache: { ...tier.cache } })),
   }))
-  const commands = new Map<string, CommandLike>()
   const storage = { gets: 0, sets: 0, setKeys: [] as string[], setValues: [] as unknown[] }
-  const synthetic: string[] = []
   let modelTransform: ((editor: ReturnType<typeof editorFor>) => void) | undefined
   let modelTransformCount = 0
   let reloads = 0
+  let rpcTable: ((input: unknown, context: unknown) => Promise<unknown>) | undefined
 
   const ctx = {
     options: config.options ?? {},
@@ -257,35 +250,44 @@ async function createHarness(
         reloads++
       },
     },
+    rpc: {
+      async register(
+        _definition: unknown,
+        handlers: { table: (input: unknown, context: unknown) => Promise<unknown> },
+      ) {
+        rpcTable = handlers.table
+        return { events: { emit: async () => {} }, dispose: async () => {} }
+      },
+    },
     command: {
-      async transform(callback: (editor: { add: (definition: CommandLike) => void }) => void) {
-        callback({
-          add(definition: CommandLike) {
-            commands.set(definition.name, definition)
-          },
-        })
-        return { dispose: async () => {} }
+      async transform() {
+        throw new Error("the server plugin must not register slash commands")
       },
     },
     session: {
-      async synthetic(input: { sessionID: string; text: string }) {
-        void input.sessionID
-        synthetic.push(input.text)
+      async synthetic() {
+        throw new Error("the server plugin must not send synthetic session messages")
       },
     },
   }
 
   const cleanup = (await plugin.setup(ctx as never)) ?? (() => {})
 
+  const invokeTableResult = async (): Promise<PricingTable> => {
+    assert.ok(rpcTable, "pricing RPC was not registered")
+    const result = (await rpcTable({}, {})) as PricingTable
+    assert.equal(typeof result.text, "string")
+    assert.ok(Array.isArray(result.rows))
+    return result
+  }
+
   return {
     ctx,
     models,
-    commands,
     storage,
     get reloads() {
       return reloads
     },
-    synthetic,
     logs,
     timers,
     modelTransformCount: () => modelTransformCount,
@@ -293,13 +295,9 @@ async function createHarness(
       assert.ok(modelTransform, "model transform was not registered")
       modelTransform(editorFor(models))
     },
-    async invokeCommand(name: string) {
-      const command = commands.get(name)
-      assert.ok(command, `command ${name} was not registered`)
-      await command.execute({ sessionID: "ses_wiring_test" })
-      const text = synthetic.at(-1)
-      assert.equal(typeof text, "string")
-      return text as string
+    invokeTableResult,
+    async invokeTable() {
+      return (await invokeTableResult()).text
     },
     cleanup,
   }
@@ -343,11 +341,7 @@ async function waitFor(
   }
 }
 
-function unescapedPipes(line: string): number {
-  return (line.match(/(?<!\\)\|/g) ?? []).length
-}
-
-/** The AA cell the plugin should render for a model from a given index. */
+/** The AA score the plugin should append for a model from a given index. */
 function aaCell(index: ReturnType<typeof snapshotScores>["scores"], id: string, name: string): string {
   const score = lookupScore(index, id, name)
   return score?.score != null ? String(Math.round(score.score * 10) / 10) : "n/a"
@@ -355,43 +349,60 @@ function aaCell(index: ReturnType<typeof snapshotScores>["scores"], id: string, 
 
 // ------------------------------------------------------------------- tests
 
-test("both commands use the model-list envelope and emit a valid Markdown table", async () => {
+test("the pricing RPC returns an aligned pricing table", async () => {
   await withPlugin({}, async (harness) => {
     harness.applyModelTransform()
 
     const snapshot = snapshotScores()
     const gptAa = aaCell(snapshot.scores, "gpt-6-astra", "GPT 6 Astra · Turbo")
     const kimiAa = aaCell(snapshot.scores, "kimi-k3", "Kimi K3")
-    const expectedLabels = formatCost(gptCost).map((tier) => tier.tierLabel ?? "base")
-    for (const name of ["model-pricing", "prices"]) {
-      const text = await harness.invokeCommand(name)
-      const lines = text.split("\n")
+    const result = await harness.invokeTableResult()
+    const text = result.text
 
-      assert.match(lines[0], /^### Model pricing & Artificial Analysis Intelligence Index$/)
-      assert.ok(
-        lines.includes(
-          "| Model | Provider | Tier | Input | Output | Cache read | Cache write | AA Intelligence |",
-        ),
-      )
-      assert.ok(lines.includes("| --- | --- | --- | --- | --- | --- | --- | --- |"))
-      // The raw name legitimately contains " · " and must not be truncated.
-      assert.match(text, /\| GPT 6 Astra · Turbo \| opencode \|/)
-      assert.match(text, /\| Kimi K3 \| opencode-go \|/)
-      for (const label of expectedLabels) {
-        assert.ok(text.includes(`| ${label} |`), `missing tier label ${label}`)
-      }
-      assert.ok(text.includes(`| ${gptAa} |`))
-      assert.ok(text.includes(`| ${kimiAa} |`))
-      assert.ok(text.includes(`Artificial Analysis Intelligence Index v${snapshot.version}`))
-      assert.ok(text.includes(`source ${snapshot.source}`))
-      assert.match(text, /fetched \d{4}-\d{2}-\d{2}/)
-      assert.match(text, /Attribution: https:\/\/artificialanalysis\.ai\//)
+    assert.equal(result.title, "Model pricing & Artificial Analysis Intelligence Index")
+    assert.match(result.meta, new RegExp(`Artificial Analysis Intelligence Index v${snapshot.version}`))
+    assert.match(result.meta, new RegExp(`Source: ${snapshot.source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))
+    assert.match(result.meta, /fetched \d{4}-\d{2}-\d{2}/)
+    assert.match(result.footnote, /Attribution: https:\/\/artificialanalysis\.ai\//)
+    assert.match(result.footnote, /bundled v5 snapshot/)
 
-      const rows = lines.filter((line) => line.startsWith("| "))
-      for (const row of rows) {
-        assert.equal(unescapedPipes(row), 9, `malformed table row: ${row}`)
-      }
-    }
+    // A real table: aligned header, rule, and one row per tier.
+    assert.match(text, /^MODEL\s+PROVIDER\s+TIER\s+IN \$\s+OUT \$\s+CACHE R\/W \$\s+AA$/m)
+    assert.match(text, /^─+$/m)
+    assert.match(
+      text,
+      new RegExp(
+        `^GPT 6 Astra · Turbo\\s+opencode\\s+>272K\\s+2\\.5\\s+15\\s+0\\.25/0\\s+${gptAa}$`,
+        "m",
+      ),
+    )
+    // Continuation tiers leave the model/provider/AA columns blank.
+    assert.match(text, /^\s+>544K\s+5\s+22\.5\s+0\.5\/0$/m)
+    assert.match(
+      text,
+      new RegExp(`^Kimi K3\\s+opencode-go\\s+base\\s+3\\s+15\\s+0\\.3/3\\s+${kimiAa}$`, "m"),
+    )
+
+    // The raw name legitimately contains " · " and must not be truncated or
+    // replaced with the decorated /models name.
+    assert.doesNotMatch(text, /^GPT 6 Astra · Turbo · /m)
+
+    const gptRows = result.rows.filter((row) => row.model === "GPT 6 Astra · Turbo")
+    assert.equal(gptRows.length, 1)
+    assert.deepEqual(gptRows[0], {
+      model: "GPT 6 Astra · Turbo",
+      provider: "opencode",
+      tier: ">272K",
+      input: "2.5",
+      output: "15",
+      cache: "0.25/0",
+      aa: gptAa,
+    })
+    const continuation = result.rows.filter((row) => row.tier === ">544K")
+    assert.equal(continuation.length, 1)
+    assert.equal(continuation[0].model, "")
+    assert.equal(continuation[0].provider, "")
+    assert.equal(continuation[0].aa, "")
   })
 })
 
@@ -408,10 +419,10 @@ test("running the model transform twice does not duplicate the suffix", async ()
     }
     assert.match(first[0], /^GPT 6 Astra · Turbo · /)
 
-    const text = await harness.invokeCommand("prices")
+    const text = await harness.invokeTable()
     // The table uses the stored base name, not the decorated name.
-    assert.match(text, /\| GPT 6 Astra · Turbo \| opencode \|/)
-    assert.doesNotMatch(text, /\| GPT 6 Astra · Turbo · [^|]*· AA /)
+    assert.match(text, /^GPT 6 Astra · Turbo\s+opencode\s+>272K/m)
+    assert.doesNotMatch(text, /^GPT 6 Astra · Turbo · /m)
   })
 })
 
@@ -420,12 +431,10 @@ test("storage.get throwing still registers the transform and decorates from the 
   const expected = aaCell(snapshot.scores, "gpt-6-astra", "GPT 6 Astra · Turbo")
   await withPlugin({ cacheGetThrows: new Error("storage unavailable") }, async (harness) => {
     assert.equal(harness.modelTransformCount(), 1)
-    assert.ok(harness.commands.has("model-pricing"))
-    assert.ok(harness.commands.has("prices"))
 
     harness.applyModelTransform()
     assert.ok(harness.models[0].name.endsWith(`AA ${expected}`))
-    await harness.invokeCommand("prices")
+    await harness.invokeTable()
   })
 })
 
@@ -500,7 +509,7 @@ test("corrupt, future-dated and stale caches fall back to the snapshot without t
       harness.applyModelTransform()
       // None of the bad caches may replace the bundled snapshot score.
       assert.ok(harness.models[0].name.endsWith(`AA ${expected}`))
-      await harness.invokeCommand("prices")
+      await harness.invokeTable()
     })
   }
 })
@@ -546,9 +555,8 @@ test("invalid options are logged once with safe fallbacks", async () => {
     },
     async (harness) => {
       assert.equal(harness.modelTransformCount(), 1) // decorateNames falls back to true
-      assert.ok(harness.commands.has("model-pricing"))
-      assert.ok(harness.commands.has("prices"))
       assert.equal(harness.timers.intervals[0].ms, 12 * HOUR)
+      await harness.invokeTable()
 
       const optionWarnings = harness.logs.warn.filter((line) => line.includes("invalid options"))
       assert.equal(optionWarnings.length, 1)
@@ -663,7 +671,7 @@ test("cleanup clears the refresh timer and aborts in-flight work", async () => {
   )
 })
 
-test("decorateNames:false still registers both commands and keeps names untouched", async () => {
+test("decorateNames:false keeps names untouched but still serves the table", async () => {
   const cacheValue = {
     scores: { gpt6astra: { score: 42, name: "GPT 6 Astra" } },
     version: "6.0",
@@ -675,24 +683,21 @@ test("decorateNames:false still registers both commands and keeps names untouche
     { options: { decorateNames: false }, cacheValue },
     async (harness) => {
       assert.equal(harness.modelTransformCount(), 0)
-      assert.ok(harness.commands.has("model-pricing"))
-      assert.ok(harness.commands.has("prices"))
 
       await waitFor(() => harness.storage.gets >= 1, "cache hydration")
       await delay(25)
       assert.equal(harness.reloads, 0, "no model transform means no registry reload")
 
       const namesBefore = harness.models.map((model) => model.name)
-      const text = await harness.invokeCommand("prices")
+      const text = await harness.invokeTable()
       assert.deepEqual(harness.models.map((model) => model.name), namesBefore)
       assert.ok(!harness.models[0].name.includes("AA 42"))
-      assert.match(text, /\| GPT 6 Astra · Turbo \| opencode \|/)
-      assert.match(text, /\| 42 \|/)
+      assert.match(text, /^GPT 6 Astra · Turbo\s+opencode\s+>272K\s+2\.5\s+15\s+0\.25\/0\s+42$/m)
     },
   )
 })
 
-test("Markdown cells escape pipes, backslashes and newlines", async () => {
+test("model headers stay on one line and scores fall back cleanly", async () => {
   const cacheValue = {
     scores: {
       gpt6astra: { score: 12.3, name: "GPT 6 Astra", note: "a|b\\c\nd" },
@@ -706,18 +711,17 @@ test("Markdown cells escape pipes, backslashes and newlines", async () => {
     await waitFor(() => harness.reloads >= 1, "cache adoption")
     harness.models[0].name = "A|B Model\\X\nY"
     harness.models[0].providerID = "p|v"
+    harness.models[1].name = "A Very Long Model Name That Can Wrap In The Panel"
     harness.applyModelTransform()
-    // The decorated registry name preserves the raw value; escaping happens
-    // when it is rendered into a Markdown cell.
     assert.ok(harness.models[0].name.includes("Y · "))
     assert.ok(harness.models[0].name.includes("AA 12.3"))
 
-    const text = await harness.invokeCommand("model-pricing")
-    const row = text.split("\n").find((line) => line.includes("A\\|B Model"))
-    assert.ok(row, "escaped model row missing")
-    assert.ok(row.includes("| A\\|B Model\\\\X Y | p\\|v |"))
-    assert.ok(row.includes("12.3 (a\\|b\\\\c d)"))
-    assert.equal(unescapedPipes(row), 9)
-    assert.ok(text.includes("source live\\|test\\\\src"))
+    const text = await harness.invokeTable()
+    assert.match(text, /^A\|B Model\\X Y\s+p\|v\s+>272K\s+2\.5\s+15\s+0\.25\/0\s+12\.3~$/m)
+    assert.match(
+      text,
+      /^A Very Long Model Name That Can Wrap In The Panel\s+opencode-go\s+base\s+3\s+15\s+0\.3\/3\s+n\/a$/m,
+    )
+    assert.ok(text.includes("Source: live|test\\src"))
   })
 })
