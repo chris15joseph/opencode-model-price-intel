@@ -24,6 +24,28 @@ export interface PricingDataset {
   readonly rows: readonly PricingRow[]
 }
 
+export type SortDirection = "asc" | "desc"
+
+/** The active sort column and direction. Model groups sort together. */
+export interface SortState {
+  readonly key: keyof PricingRow
+  readonly direction: SortDirection
+}
+
+/** One header cell, including the gap that follows it. */
+export interface PricingTableColumn {
+  readonly key: keyof PricingRow
+  /** Header text plus the direction indicator when this column is sorted. */
+  readonly label: string
+  /** Cell width, not counting the inter-column gap. */
+  readonly width: number
+  readonly align: "left" | "right"
+  /** Padded header cell followed by `COLUMN_GAP` (empty on the last cell). */
+  readonly header: string
+  /** Set only for the active sort column. */
+  readonly direction?: SortDirection
+}
+
 export interface PricingTableLayout {
   /** Header row, already padded to the chosen column widths. */
   readonly header: string
@@ -31,6 +53,8 @@ export interface PricingTableLayout {
   readonly separator: string
   /** One aligned line per pricing row. */
   readonly lines: readonly string[]
+  /** Per-column layout, used by the TUI to make headers clickable. */
+  readonly columns: readonly PricingTableColumn[]
 }
 
 /** Fallback width used by the RPC `text` field and `dialog.alert`. */
@@ -143,6 +167,125 @@ export function pricingData(
   }
 }
 
+/**
+ * Toggle a sort: the first click on a column sorts ascending, a second click
+ * on the same column flips the direction, and a different column starts over.
+ */
+export function nextSort(current: SortState | undefined, key: keyof PricingRow): SortState {
+  if (current?.key === key) {
+    return { key, direction: current.direction === "asc" ? "desc" : "asc" }
+  }
+  return { key, direction: "asc" }
+}
+
+interface RowGroup {
+  readonly rows: PricingRow[]
+  readonly index: number
+}
+
+/**
+ * Split the flat row list into model groups. A non-empty model starts a group;
+ * blank model cells are continuation tiers and stay with the group above.
+ */
+function groupRows(rows: readonly PricingRow[]): RowGroup[] {
+  const groups: RowGroup[] = []
+  for (const row of rows) {
+    if (row.model !== "" || groups.length === 0) {
+      groups.push({ rows: [row], index: groups.length })
+    } else {
+      groups[groups.length - 1].rows.push(row)
+    }
+  }
+  return groups
+}
+
+type Sortable =
+  | { readonly kind: "text"; readonly text: string }
+  | { readonly kind: "number"; readonly values: readonly number[] }
+  | { readonly kind: "missing" }
+
+function sortable(value: string, key: keyof PricingRow): Sortable {
+  const text = value.trim()
+  if (key === "model" || key === "provider" || key === "tier") {
+    return { kind: "text", text }
+  }
+  if (text === "" || text === "—" || text === "?" || text.toLowerCase() === "n/a") {
+    return { kind: "missing" }
+  }
+
+  // Cache cells are "read/write", so compare the read price first and use the
+  // write price as a tie-breaker. Other numeric cells are a single value.
+  const parts = key === "cache" ? text.split("/") : [text]
+  const values: number[] = []
+  for (const part of parts) {
+    const token = part.trim().replace(/^\$/, "").replace(/^</, "")
+    if (token.toLowerCase() === "free") {
+      values.push(0)
+      continue
+    }
+    const match = /^-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/i.exec(token)
+    const number = match ? Number(match[0]) : Number.NaN
+    if (!Number.isFinite(number)) return { kind: "missing" }
+    values.push(number)
+  }
+  return { kind: "number", values }
+}
+
+function compareText(left: string, right: string): number {
+  const a = left.toLowerCase()
+  const b = right.toLowerCase()
+  if (a < b) return -1
+  if (a > b) return 1
+  if (left === right) return 0
+  return left < right ? -1 : 1
+}
+
+function compareSortable(left: Sortable, right: Sortable): number {
+  if (left.kind === "text" && right.kind === "text") {
+    return compareText(left.text, right.text)
+  }
+  if (left.kind === "number" && right.kind === "number") {
+    const length = Math.max(left.values.length, right.values.length)
+    for (let index = 0; index < length; index++) {
+      const a = left.values[index]
+      const b = right.values[index]
+      if (a === b) continue
+      if (a === undefined) return -1
+      if (b === undefined) return 1
+      return a < b ? -1 : 1
+    }
+    return 0
+  }
+  return 0
+}
+
+/**
+ * Sort model groups by one column while keeping continuation tiers attached.
+ * Sorting is stable: registry order survives ties in both directions, and
+ * missing/unpriced values sort last regardless of direction.
+ */
+export function sortRows(
+  rows: readonly PricingRow[],
+  key: keyof PricingRow,
+  direction: SortDirection = "asc",
+): PricingRow[] {
+  const groups = groupRows(rows)
+  groups.sort((left, right) => {
+    const a = sortable(left.rows[0][key], key)
+    const b = sortable(right.rows[0][key], key)
+    if (a.kind === "missing" || b.kind === "missing") {
+      if (a.kind === b.kind) return left.index - right.index
+      return a.kind === "missing" ? 1 : -1
+    }
+    const comparison = compareSortable(a, b)
+    if (comparison !== 0) {
+      return direction === "asc" ? comparison : -comparison
+    }
+    return left.index - right.index
+  })
+  return groups.flatMap((group) => group.rows)
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
@@ -160,10 +303,19 @@ function fit(value: string, width: number, align: "left" | "right"): string {
   return align === "right" ? `${padding}${text}` : `${text}${padding}`
 }
 
-function columnWidths(rows: readonly PricingRow[], width: number): Record<keyof PricingRow, number> {
+function headerLabel(column: Column, sort: SortState | undefined): string {
+  if (sort?.key !== column.key) return column.header
+  return `${column.header} ${sort.direction === "asc" ? "▲" : "▼"}`
+}
+
+function columnWidths(
+  rows: readonly PricingRow[],
+  width: number,
+  sort: SortState | undefined,
+): Record<keyof PricingRow, number> {
   const natural = {} as Record<keyof PricingRow, number>
   for (const column of COLUMNS) {
-    let widest = column.header.length
+    let widest = headerLabel(column, sort).length
     for (const row of rows) widest = Math.max(widest, row[column.key].length)
     natural[column.key] = clamp(widest, column.min, column.max)
   }
@@ -186,9 +338,10 @@ function columnWidths(rows: readonly PricingRow[], width: number): Record<keyof 
 export function formatRows(
   rows: readonly PricingRow[],
   width: number = DEFAULT_TABLE_WIDTH,
+  sort?: SortState,
 ): PricingTableLayout {
   const safeWidth = Math.max(24, Math.floor(width))
-  const widths = columnWidths(rows, safeWidth)
+  const widths = columnWidths(rows, safeWidth, sort)
   const line = (cells: Readonly<Record<keyof PricingRow, string>>, trim: boolean): string => {
     const rendered = COLUMNS.map((column) =>
       fit(cells[column.key], widths[column.key], column.align),
@@ -196,15 +349,25 @@ export function formatRows(
     return trim ? rendered.trimEnd() : rendered
   }
 
-  const headerCells = Object.fromEntries(
-    COLUMNS.map((column) => [column.key, column.header]),
-  ) as Record<keyof PricingRow, string>
-  const header = line(headerCells, false)
+  const columns = COLUMNS.map((column, index): PricingTableColumn => {
+    const label = headerLabel(column, sort)
+    const gap = index === COLUMNS.length - 1 ? "" : COLUMN_GAP
+    return {
+      key: column.key,
+      label: oneLine(label),
+      width: widths[column.key],
+      align: column.align,
+      header: `${fit(label, widths[column.key], column.align)}${gap}`,
+      direction: sort?.key === column.key ? sort.direction : undefined,
+    }
+  })
+  const header = columns.map((column) => column.header).join("")
 
   return {
     header,
     separator: "─".repeat(header.length),
     lines: rows.map((row) => line(row, true)),
+    columns,
   }
 }
 

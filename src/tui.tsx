@@ -12,7 +12,13 @@ import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { ModelPricing, type PricingTable } from "./rpc.ts"
-import { DEFAULT_TABLE_WIDTH, formatRows } from "./table.ts"
+import {
+  DEFAULT_TABLE_WIDTH,
+  formatRows,
+  nextSort,
+  sortRows,
+  type SortState,
+} from "./table.ts"
 
 function PricingDialog(props: {
   readonly table: () => PricingTable | undefined
@@ -23,6 +29,8 @@ function PricingDialog(props: {
   const theme = context.theme.surface("dialog")
   const width = () => Math.max(40, Math.min(DEFAULT_TABLE_WIDTH, dimensions().width - 10))
   const maxHeight = () => Math.max(5, Math.floor(dimensions().height / 2) - 6)
+  const [sort, setSort] = createSignal<SortState | undefined>()
+  const sortBy = (key: SortState["key"]) => setSort((current) => nextSort(current, key))
 
   const focus = (scroll: ScrollBoxRenderable) => {
     // The dialog has no search input, so give the table keyboard focus.
@@ -46,16 +54,40 @@ function PricingDialog(props: {
         fallback={<text fg={theme.text.muted}>Loading model pricing…</text>}
       >
         {(table: () => PricingTable) => {
-          const layout = createMemo(() => formatRows(table().rows, width()))
+          const layout = createMemo(() => {
+            const state = sort()
+            const rows = state
+              ? sortRows(table().rows, state.key, state.direction)
+              : table().rows
+            return formatRows(rows, width(), state)
+          })
           return (
             <>
               <text fg={theme.text.muted} wrapMode="word">
                 {table().meta}
               </text>
               <box flexDirection="column">
-                <text attributes={TextAttributes.BOLD} fg={theme.text.base} wrapMode="none">
-                  {layout().header}
-                </text>
+                <box flexDirection="row" flexShrink={0}>
+                  <For each={layout().columns}>
+                    {(column) => (
+                      <text
+                        attributes={TextAttributes.BOLD}
+                        fg={column.direction ? theme.text.base : theme.text.muted}
+                        wrapMode="none"
+                        flexShrink={0}
+                        onMouseUp={(event) => {
+                          // The host closes on a backdrop click; a header click
+                          // must only change the sort order.
+                          event.preventDefault()
+                          event.stopPropagation()
+                          sortBy(column.key)
+                        }}
+                      >
+                        {column.header}
+                      </text>
+                    )}
+                  </For>
+                </box>
                 <text fg={theme.text.faint} wrapMode="none">
                   {layout().separator}
                 </text>

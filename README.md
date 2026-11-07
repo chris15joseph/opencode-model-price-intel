@@ -91,7 +91,10 @@ line.
 
 For the full table, run `/model-pricing` (or `/prices`). It opens a native TUI
 dialog with an aligned, scrollable table of every provider, price tier, cache
-price, and AA score. The dialog can be dismissed with `Esc`, `Ctrl+C`, or a
+price, and AA score. Click any column header to sort by it; click the same
+header again to reverse the order. The active header shows `▲` (ascending) or
+`▼` (descending), and multi-tier models stay together with their continuation
+rows. The dialog can be dismissed with `Esc`, `Ctrl+C`, or a
 click outside. The command handler is a toggle, so invoking it again while the
 dialog is open closes it (the dialog is modal, so `Esc` is the usual path from
 the prompt). The table is a TUI feature; the `/models` decoration is
