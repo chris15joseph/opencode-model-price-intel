@@ -1,8 +1,24 @@
-# Release checklist — `opencode-model-pricing`
+# Release checklist — `opencode-model-price-intel`
 
-**Status: not published.** Publishing requires explicit approval from the
-repository owner (Christopher Joseph). CI in this repository never publishes;
-there is no publish workflow and no npm token configured.
+**Status: staged, not published.** The package and repository were renamed from
+`opencode-model-pricing` to `opencode-model-price-intel` on 2026-11-07 to avoid
+the existing npm package of the old name. Publishing requires explicit approval
+from the repository owner (Christopher Joseph). CI in this repository never
+publishes; there is no publish workflow and no npm token configured.
+
+## Staging status (2026-11-07)
+
+- [x] Package metadata, plugin ID, log prefix, README, changelog, CI, and
+      release docs renamed.
+- [x] GitHub repository renamed; the old URL redirects.
+- [x] `main` is the default branch and is protected; direct pushes are limited
+      to the owner/administrators.
+- [x] Repository is public.
+- [x] `npm pack --dry-run` and `npm publish --dry-run` verified locally.
+- [ ] `npm publish --access public` — awaiting explicit owner approval.
+- [ ] `v1.0.0` tag and GitHub release — only after the first publish.
+- [ ] Directory listings — blocked on the npm publication (and, for
+      awesome-opencode, on the repository's 30-day/25-star traction rules).
 
 ## Supported runtime
 
@@ -30,7 +46,7 @@ there is no publish workflow and no npm token configured.
 ### Pre-release gates
 
 - [ ] Working tree clean (`git status --short` empty) and the release commit is
-      on `master`.
+      on `main`.
 - [ ] `npm ci` succeeds from the committed `package-lock.json`.
 - [ ] `npm run typecheck` exits 0. Do not release while it fails.
 - [ ] `npm test` passes on Node 20, 22, 24, and 26.
@@ -41,7 +57,7 @@ there is no publish workflow and no npm token configured.
 - [ ] `npm audit --omit=dev` has been re-run and the result is recorded below.
 - [ ] `CHANGELOG.md` has an entry for the version and the date is set when
       released (it stays `Unreleased` until then).
-- [ ] README claims match code and live behavior (owned by WS6).
+- [ ] README claims match code and live behavior.
 - [ ] No secrets, `node_modules/`, `*.tgz`, or coverage output are tracked.
 - [ ] Explicit publish approval has been recorded by the repository owner.
 
@@ -88,7 +104,7 @@ when a newer `@opencode/plugin` release updates the transitive stack.
 ## Cross-repo duplication decision (2026-11-02)
 
 The small cache/TTL/fetch/interval helpers stay **duplicated** between
-`opencode-model-pricing` and `opencode-zero-retention-models` for 1.0.0.
+`opencode-model-price-intel` and `opencode-zero-retention-models` for 1.0.0.
 
 Rationale:
 
@@ -122,7 +138,7 @@ Use this for every change to either plugin:
 - [ ] `LICENSE` (MIT, 2026), `CHANGELOG.md`, this `RELEASE.md`, and fixture
       provenance under `test/fixtures/README.md`.
 - [ ] `NOTICE` for third-party data where required (Artificial Analysis in
-      `opencode-model-pricing`).
+      `opencode-model-price-intel`).
 - [ ] `npm audit --omit=dev` recorded; advisories documented, never silently
       claimed as fixed.
 - [ ] Tarball contains only `package.json`, `README.md`, `LICENSE`, intended

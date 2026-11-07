@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [master, "release/**"]
+    branches: [main, "release/**"]
     tags: ["v*"]
   pull_request:
 
@@ -22,8 +22,8 @@ jobs:
       matrix:
         node: ["20", "22", "24", "26"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -40,8 +40,8 @@ jobs:
     name: pack + install smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -74,7 +74,7 @@ jobs:
           node - <<'NODE'
           const fs = require("node:fs")
           const path = require("node:path")
-          const pkgDir = path.join(process.cwd(), "node_modules", "opencode-model-pricing")
+          const pkgDir = path.join(process.cwd(), "node_modules", "opencode-model-price-intel")
           const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, "package.json"), "utf8"))
           if (pkg.dependencies?.["@opencode/plugin"] !== "2.2.5") throw new Error("runtime dependency is not pinned")
           if (pkg.engines?.node !== ">=20") throw new Error("engines.node is missing")
@@ -92,7 +92,7 @@ jobs:
           SMOKE_DIR="$RUNNER_TEMP/smoke"
           cd "$SMOKE_DIR"
           rm -rf "$SMOKE_DIR/import-check-pkg"
-          cp -R node_modules/opencode-model-pricing "$SMOKE_DIR/import-check-pkg"
+          cp -R node_modules/opencode-model-price-intel "$SMOKE_DIR/import-check-pkg"
           node --experimental-strip-types - <<'NODE'
           const path = require("node:path")
           const { pathToFileURL } = require("node:url")
@@ -124,7 +124,7 @@ jobs:
           cat > "$XDG_CONFIG_HOME/opencode/opencode.json" <<JSON
           {
             "\$schema": "https://opencode.ai/config.json",
-            "plugins": ["$SMOKE_DIR/node_modules/opencode-model-pricing"]
+            "plugins": ["$SMOKE_DIR/node_modules/opencode-model-price-intel"]
           }
           JSON
           cd "$SMOKE_DIR"

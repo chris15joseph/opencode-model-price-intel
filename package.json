@@ -1,7 +1,7 @@
 {
-  "name": "opencode-model-pricing",
+  "name": "opencode-model-price-intel",
   "version": "1.0.0",
-  "description": "OpenCode plugin: list input/output/cache prices and Artificial Analysis Intelligence Index scores per model in /models. Prices come from the live model registry; scores refresh on plugin load and every refreshHours (default 12), with a bundled snapshot fallback.",
+  "description": "OpenCode 2 plugin that adds input/output/cache prices and Artificial Analysis Intelligence Index scores to /models, plus a full /model-pricing table.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -30,12 +30,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chris15joseph/opencode-model-pricing.git"
+    "url": "git+https://github.com/chris15joseph/opencode-model-price-intel.git"
   },
   "author": "Christopher Joseph <chrisjoseph15496@gmail.com>",
-  "homepage": "https://github.com/chris15joseph/opencode-model-pricing#readme",
+  "homepage": "https://github.com/chris15joseph/opencode-model-price-intel#readme",
   "bugs": {
-    "url": "https://github.com/chris15joseph/opencode-model-pricing/issues"
+    "url": "https://github.com/chris15joseph/opencode-model-price-intel/issues"
   },
   "publishConfig": {
     "access": "public"
@@ -45,6 +45,7 @@
     "opencode-plugin",
     "pricing",
     "model-pricing",
+    "model-cost",
     "artificial-analysis",
     "intelligence-index",
     "llm",

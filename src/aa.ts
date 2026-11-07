@@ -637,19 +637,19 @@ async function fetchWithRetry(
       const requestedDelay = retryAfter ?? options.retryDelayMs * 2 ** (attempt - 1)
       if (requestedDelay > MAX_RETRY_DELAY_MS) {
         options.log(
-          `[model-pricing] Artificial Analysis returned ${response.status} with Retry-After ${requestedDelay}ms; not retrying (cap ${MAX_RETRY_DELAY_MS}ms)`,
+          `[model-price-intel] Artificial Analysis returned ${response.status} with Retry-After ${requestedDelay}ms; not retrying (cap ${MAX_RETRY_DELAY_MS}ms)`,
         )
         return response
       }
       options.log(
-        `[model-pricing] Artificial Analysis returned ${response.status}; retry ${attempt}/${MAX_ATTEMPTS - 1} in ${requestedDelay}ms`,
+        `[model-price-intel] Artificial Analysis returned ${response.status}; retry ${attempt}/${MAX_ATTEMPTS - 1} in ${requestedDelay}ms`,
       )
       await sleep(requestedDelay)
     } catch (error) {
       if (isAbortError(error) || attempt >= MAX_ATTEMPTS) throw error
       const delay = Math.min(options.retryDelayMs * 2 ** (attempt - 1), MAX_RETRY_DELAY_MS)
       options.log(
-        `[model-pricing] Artificial Analysis request failed (${error instanceof Error ? error.message : String(error)}); retry ${attempt}/${MAX_ATTEMPTS - 1} in ${delay}ms`,
+        `[model-price-intel] Artificial Analysis request failed (${error instanceof Error ? error.message : String(error)}); retry ${attempt}/${MAX_ATTEMPTS - 1} in ${delay}ms`,
       )
       await sleep(delay)
     }
@@ -721,14 +721,14 @@ export async function fetchFromAPI(
     } catch (error) {
       if (page === 1) throw error
       settings.log(
-        `[model-pricing] Artificial Analysis API page ${page} failed (${error instanceof Error ? error.message : String(error)}); keeping ${bySlug.size} records from earlier pages`,
+        `[model-price-intel] Artificial Analysis API page ${page} failed (${error instanceof Error ? error.message : String(error)}); keeping ${bySlug.size} records from earlier pages`,
       )
       break
     }
     if (!response.ok) {
       if (page === 1) throw new Error(`AA API returned ${response.status}`)
       settings.log(
-        `[model-pricing] Artificial Analysis API page ${page} returned ${response.status}; keeping ${bySlug.size} records from earlier pages`,
+        `[model-price-intel] Artificial Analysis API page ${page} returned ${response.status}; keeping ${bySlug.size} records from earlier pages`,
       )
       break
     }
@@ -738,17 +738,17 @@ export async function fetchFromAPI(
       body = await response.json()
     } catch {
       if (page === 1) throw new Error("AA API returned invalid JSON")
-      settings.log(`[model-pricing] Artificial Analysis API page ${page} was not JSON; keeping earlier pages`)
+      settings.log(`[model-price-intel] Artificial Analysis API page ${page} was not JSON; keeping earlier pages`)
       break
     }
     if (!isObject(body)) {
       if (page === 1) throw new Error("AA API returned a non-object body")
-      settings.log(`[model-pricing] Artificial Analysis API page ${page} had an invalid shape; keeping earlier pages`)
+      settings.log(`[model-price-intel] Artificial Analysis API page ${page} had an invalid shape; keeping earlier pages`)
       break
     }
     if (!Array.isArray(body.data)) {
       if (page === 1) throw new Error("AA API response data is not an array")
-      settings.log(`[model-pricing] Artificial Analysis API page ${page} had no data array; keeping earlier pages`)
+      settings.log(`[model-price-intel] Artificial Analysis API page ${page} had no data array; keeping earlier pages`)
       break
     }
 
@@ -788,7 +788,7 @@ export async function fetchFromAPI(
     if (target <= page) break
     if (target > AA_MAX_API_PAGES) {
       settings.log(
-        `[model-pricing] Artificial Analysis pagination stopped at the ${AA_MAX_API_PAGES}-page safety cap`,
+        `[model-price-intel] Artificial Analysis pagination stopped at the ${AA_MAX_API_PAGES}-page safety cap`,
       )
       break
     }
@@ -847,7 +847,7 @@ export async function fetchAAScores(options?: AAFetchOptions): Promise<AAFetched
       if (records.length > 0) {
         const { scores, coverage } = mergeWithSnapshot(indexRecords(records), version)
         log(
-          `[model-pricing] AA API (${pages} page${pages === 1 ? "" : "s"}): ${coverage.live} live + ${coverage.snapshot} snapshot scores`,
+          `[model-price-intel] AA API (${pages} page${pages === 1 ? "" : "s"}): ${coverage.live} live + ${coverage.snapshot} snapshot scores`,
         )
         return {
           scores,
@@ -857,10 +857,10 @@ export async function fetchAAScores(options?: AAFetchOptions): Promise<AAFetched
           coverage,
         }
       }
-      log("[model-pricing] AA API returned no usable model records; falling back to the model page")
+      log("[model-price-intel] AA API returned no usable model records; falling back to the model page")
     } catch (error) {
       log(
-        `[model-pricing] AA API failed (${error instanceof Error ? error.message : String(error)}); falling back to the model page`,
+        `[model-price-intel] AA API failed (${error instanceof Error ? error.message : String(error)}); falling back to the model page`,
       )
     }
   }
@@ -873,7 +873,7 @@ export async function fetchAAScores(options?: AAFetchOptions): Promise<AAFetched
         ? `artificialanalysis.ai model pages; assumed ${page.version} (page)`
         : "artificialanalysis.ai model pages"
       log(
-        `[model-pricing] AA model page (v${page.version}${page.versionAssumed ? " assumed" : ""}): ${coverage.live} live + ${coverage.snapshot} snapshot scores`,
+        `[model-price-intel] AA model page (v${page.version}${page.versionAssumed ? " assumed" : ""}): ${coverage.live} live + ${coverage.snapshot} snapshot scores`,
       )
       return {
         scores,
@@ -883,10 +883,10 @@ export async function fetchAAScores(options?: AAFetchOptions): Promise<AAFetched
         coverage,
       }
     }
-    log("[model-pricing] AA model page contained no model records")
+    log("[model-price-intel] AA model page contained no model records")
   } catch (error) {
     log(
-      `[model-pricing] AA model page failed (${error instanceof Error ? error.message : String(error)}); using bundled snapshot`,
+      `[model-price-intel] AA model page failed (${error instanceof Error ? error.message : String(error)}); using bundled snapshot`,
     )
   }
 

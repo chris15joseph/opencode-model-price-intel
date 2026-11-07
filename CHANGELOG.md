@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `opencode-model-pricing` are documented here.
+All notable changes to `opencode-model-price-intel` are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -9,6 +9,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 Initial public release. This entry stays **Unreleased** until the checklist in
 `RELEASE.md` is complete. Publishing requires explicit approval.
+
+### Changed
+
+- Renamed the package and repository from `opencode-model-pricing` to
+  `opencode-model-price-intel` before the first publish, because the old npm
+  name belongs to an unrelated plugin. The plugin ID is now
+  `model-price-intel`; the `/model-pricing` and `/prices` commands are
+  unchanged.
 
 ### Added
 

@@ -1,5 +1,5 @@
 /**
- * opencode-model-pricing
+ * opencode-model-price-intel
  *
  * Makes the `/models` list show each model's input, output and cache prices
  * together with its Artificial Analysis Intelligence Index score.
@@ -131,7 +131,7 @@ function resolveOptions(raw: unknown): ResolvedOptions {
   }
 
   if (problems.length > 0) {
-    console.warn(`[model-pricing] invalid options — ${problems.join("; ")}`)
+    console.warn(`[model-price-intel] invalid options — ${problems.join("; ")}`)
   }
 
   return {
@@ -254,7 +254,7 @@ function buildTable(
     try {
       tiers = formatCost(model.cost)
     } catch (error) {
-      console.warn(`[model-pricing] could not format cost for ${modelKey(model)}:`, error)
+      console.warn(`[model-price-intel] could not format cost for ${modelKey(model)}:`, error)
     }
     const rows = tiers.length > 0 ? tiers : [undefined]
     rows.forEach((tier, index) => {
@@ -286,7 +286,7 @@ function undecoratedName(name: string, price: string): string {
 }
 
 export default Plugin.define({
-  id: "model-pricing",
+  id: "model-price-intel",
   async setup(ctx) {
     const options = resolveOptions(ctx.options)
 
@@ -305,10 +305,10 @@ export default Plugin.define({
       if (!options.decorateNames || stopped) return
       try {
         void Promise.resolve(ctx.model.reload()).catch((error) =>
-          console.warn("[model-pricing] model reload failed:", error),
+          console.warn("[model-price-intel] model reload failed:", error),
         )
       } catch (error) {
-        console.warn("[model-pricing] model reload failed:", error)
+        console.warn("[model-price-intel] model reload failed:", error)
       }
     }
 
@@ -323,12 +323,12 @@ export default Plugin.define({
       try {
         raw = await ctx.storage.get(CACHE_KEY)
       } catch (error) {
-        console.warn("[model-pricing] AA cache read failed; continuing without it:", error)
+        console.warn("[model-price-intel] AA cache read failed; continuing without it:", error)
         return undefined
       }
       if (raw === undefined) return undefined
       if (!isAAFetched(raw)) {
-        console.warn("[model-pricing] ignoring invalid AA cache; using the bundled snapshot")
+        console.warn("[model-price-intel] ignoring invalid AA cache; using the bundled snapshot")
         return undefined
       }
       return raw
@@ -366,7 +366,7 @@ export default Plugin.define({
           live = await fetchAAScores({ apiKey: options.aaApiKey, fetchImpl: makeAbortableFetch() })
         } catch (error) {
           if (!stopped) {
-            console.error("[model-pricing] live Artificial Analysis fetch failed:", error)
+            console.error("[model-price-intel] live Artificial Analysis fetch failed:", error)
           }
           return
         }
@@ -377,11 +377,11 @@ export default Plugin.define({
           await ctx.storage.set(CACHE_KEY, cachePayload(live))
         } catch (error) {
           // A cache write failure is not a fetch failure: keep live data.
-          console.warn("[model-pricing] AA cache write failed; live data kept:", error)
+          console.warn("[model-price-intel] AA cache write failed; live data kept:", error)
         }
         if (stopped) return
         console.log(
-          `[model-pricing] loaded AA Intelligence Index v${live.version} from ${live.source}`,
+          `[model-price-intel] loaded AA Intelligence Index v${live.version} from ${live.source}`,
         )
         if (changed) reloadModels()
       } finally {
@@ -412,7 +412,7 @@ export default Plugin.define({
                   })
                 } catch (error) {
                   console.warn(
-                    `[model-pricing] editor.update failed for ${key}; mutating the draft:`,
+                    `[model-price-intel] editor.update failed for ${key}; mutating the draft:`,
                     error,
                   )
                   model.name = decorated
@@ -420,11 +420,11 @@ export default Plugin.define({
               }
             } catch (error) {
               // One bad registry entry must never fail the whole transform.
-              console.warn("[model-pricing] could not decorate a model:", error)
+              console.warn("[model-price-intel] could not decorate a model:", error)
             }
           }
         } catch (error) {
-          console.warn("[model-pricing] model transform failed:", error)
+          console.warn("[model-price-intel] model transform failed:", error)
         }
       })
     }
@@ -438,7 +438,7 @@ export default Plugin.define({
           const { data } = await ctx.model.list()
           models = Array.isArray(data) ? data : []
         } catch (error) {
-          console.warn("[model-pricing] could not list models for the pricing table:", error)
+          console.warn("[model-price-intel] could not list models for the pricing table:", error)
         }
         await ctx.session.synthetic({
           sessionID: input.sessionID,
@@ -462,12 +462,12 @@ export default Plugin.define({
     // not wait for storage or the network; the snapshot transform is already
     // registered. Reload the registry only when the data actually changed.
     void refresh(false).catch((error) => {
-      if (!stopped) console.error("[model-pricing] background refresh failed:", error)
+      if (!stopped) console.error("[model-price-intel] background refresh failed:", error)
     })
 
     timer = setInterval(() => {
       void refresh(true).catch((error) => {
-        if (!stopped) console.error("[model-pricing] refresh failed:", error)
+        if (!stopped) console.error("[model-price-intel] refresh failed:", error)
       })
     }, options.refreshMs)
 
