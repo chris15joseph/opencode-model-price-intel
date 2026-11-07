@@ -15,8 +15,8 @@ Intelligence Index** next to every model in `/models`, and adds a full
 ```
 
 Prices are USD per 1M tokens, read from the live OpenCode model registry. Scores
-come from Artificial Analysis and refresh in the background. Both are cached, so
-the first `/models` render is instant and the network never blocks it.
+come from Artificial Analysis and refresh in the background. Scores are cached,
+so the first `/models` render is instant and the network never blocks it.
 
 ## Install
 
@@ -76,7 +76,7 @@ list the same plugin twice.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `decorateNames` | `true` | Append the price/score summary to `/models` names. The details still show up on reload and via `/model-pricing`. |
+| `decorateNames` | `true` | Append the price/score summary to `/models` names. The `/model-pricing` table still works when this is off. |
 | `costFormat` | `"detailed"` | `"detailed"` renders `in $2.5 out $15 · cache read $0.25 write $0`; `"compact"` renders `$2.5/$15/$0.25/$0`. |
 | `aaApiKey` | unset | Artificial Analysis API key. Falls back to `ARTIFICIALANALYSIS_API_KEY`. Without either, the public model-list page is used. |
 | `refreshHours` | `12` | Score cache TTL and refresh interval, clamped to `1..596` hours. |
