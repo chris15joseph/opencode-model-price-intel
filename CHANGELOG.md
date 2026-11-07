@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-07
+
 ### Changed
 
 - `/model-pricing` and `/prices` now open a native TUI dialog with an aligned,
@@ -15,6 +17,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   the table out for the current terminal width while other clients still get a
   readable fallback. Previously the server command injected a synthetic
   session message, which was delivered to the model instead of displayed.
+- The `/model-pricing` dialog's column headers are clickable. Sorting by model,
+  provider, tier, input, output, cache, or AA keeps multi-tier models grouped
+  with their continuation rows, toggles ascending/descending on repeat clicks,
+  and marks the active header with `▲`/`▼`.
 
 ## [1.0.0] - 2026-11-07
 
