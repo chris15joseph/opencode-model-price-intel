@@ -1,6 +1,7 @@
 # opencode-model-price-intel
 
 [![CI](https://github.com/chris15joseph/opencode-model-price-intel/actions/workflows/ci.yml/badge.svg)](https://github.com/chris15joseph/opencode-model-price-intel/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/opencode-model-price-intel)](https://www.npmjs.com/package/opencode-model-price-intel)
 [![license](https://img.shields.io/npm/l/opencode-model-price-intel)](LICENSE)
 
 An OpenCode 2 plugin that puts **prices and the Artificial Analysis
@@ -22,13 +23,6 @@ so the first `/models` render is instant and the network never blocks it.
 
 Requires OpenCode 2.2.x (the plugin pins `@opencode/plugin` to `2.2.5`) and
 Node.js 20 or newer.
-
-> **npm status:** the package is staged but not yet published. Until it appears
-> on npm, install from Git:
->
-> ```sh
-> opencode plugin add github:chris15joseph/opencode-model-price-intel
-> ```
 
 ```sh
 opencode plugin add opencode-model-price-intel
