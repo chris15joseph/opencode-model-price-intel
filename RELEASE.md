@@ -1,12 +1,12 @@
 # Release checklist — `opencode-model-price-intel`
 
-**Status: staged, not published.** The package and repository were renamed from
-`opencode-model-pricing` to `opencode-model-price-intel` on 2026-11-07 to avoid
-the existing npm package of the old name. Publishing requires explicit approval
-from the repository owner (Christopher Joseph). CI in this repository never
-publishes; there is no publish workflow and no npm token configured.
+**Status: published.** `1.0.0` was published to npm on 2026-11-07. The package
+and repository were renamed from `opencode-model-pricing` to
+`opencode-model-price-intel` on the same day to avoid the existing npm package
+of the old name. CI in this repository never publishes; there is no publish
+workflow and no npm token configured.
 
-## Staging status (2026-11-07)
+## Release status (2026-11-07)
 
 - [x] Package metadata, plugin ID, log prefix, README, changelog, CI, and
       release docs renamed.
@@ -15,10 +15,18 @@ publishes; there is no publish workflow and no npm token configured.
       to the owner/administrators.
 - [x] Repository is public.
 - [x] `npm pack --dry-run` and `npm publish --dry-run` verified locally.
-- [ ] `npm publish --access public` — awaiting explicit owner approval.
-- [ ] `v1.0.0` tag and GitHub release — only after the first publish.
-- [ ] Directory listings — blocked on the npm publication (and, for
-      awesome-opencode, on the repository's 30-day/25-star traction rules).
+- [x] `npm publish --access public` completed; `latest` is `1.0.0`.
+- [x] `v1.0.0` tag and GitHub release.
+- [ ] Directory listings — opencode.im submitted; awesome-opencode is blocked
+      by its 30-day/25-star traction rules; opencode.cafe needs a signed-in
+      browser submission.
+
+### npm registry state
+
+| Version | Tag | Notes |
+| --- | --- | --- |
+| `1.0.0` | `latest` | Published from commit `01567dc`; this is what `opencode plugin add opencode-model-price-intel` installs. |
+| `0.0.0-stage` | none | Stub published only to reserve the name. Untagged, not installed by `@latest`, and marked for deprecation. |
 
 ## Supported runtime
 
@@ -34,7 +42,7 @@ publishes; there is no publish workflow and no npm token configured.
 ## Versioning and tags
 
 - Follow SemVer: `MAJOR.MINOR.PATCH`.
-- `1.0.0` is the first release and is still **Unreleased**.
+- `1.0.0` is the first release, published 2026-11-07.
 - Tag releases as annotated tags: `vX.Y.Z` (for example `v1.0.0`).
 - The tag must match `package.json` `version` exactly. Never move or re-point a
   published tag.

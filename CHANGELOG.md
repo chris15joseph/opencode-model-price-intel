@@ -5,10 +5,9 @@ All notable changes to `opencode-model-price-intel` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-11-07
 
-Initial public release. This entry stays **Unreleased** until the checklist in
-`RELEASE.md` is complete. Publishing requires explicit approval.
+First public release.
 
 ### Changed
 
@@ -17,6 +16,9 @@ Initial public release. This entry stays **Unreleased** until the checklist in
   name belongs to an unrelated plugin. The plugin ID is now
   `model-price-intel`; the `/model-pricing` and `/prices` commands are
   unchanged.
+- A `0.0.0-stage` stub was published first only to reserve the npm name. It is
+  untagged and not what `opencode plugin add opencode-model-price-intel`
+  installs; `latest` points at `1.0.0`.
 
 ### Added
 
