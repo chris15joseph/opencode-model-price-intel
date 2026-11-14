@@ -461,18 +461,34 @@ export function lookupScore(
   modelName: string,
 ): AAScore | undefined {
   const keys = [...new Set([matchKey(modelID), matchKey(modelName)].filter((key) => key.length > 0))]
-  const exactEntries: AAScore[] = []
+  const exactEntries: { key: string; entry: AAScore }[] = []
   for (const key of keys) {
     const entry = index[key]
     if (!entry) continue
     const duplicate = exactEntries.some(
-      (existing) => existing === entry || (existing.name === entry.name && existing.score === entry.score),
+      ({ entry: existing }) =>
+        existing === entry || (existing.name === entry.name && existing.score === entry.score),
     )
-    if (!duplicate) exactEntries.push(entry)
+    if (!duplicate) exactEntries.push({ key, entry })
   }
-  // ID and display name disagreeing is ambiguous: show AA n/a rather than guess.
-  if (exactEntries.length > 1) return undefined
-  const exact = exactEntries[0]
+  // ID and display name can legitimately resolve to two entries, e.g. a
+  // checkpoint-scored model whose ID normalizes to the unscored base name
+  // ("deepseek-v4.1-flash") while the display name normalizes to the scored
+  // checkpoint ("DeepSeek V4.1 Flash 1017"). When exactly one of them carries
+  // a score and the keys are versions of the same name, use it; unrelated
+  // names or two distinct scores stay ambiguous.
+  if (exactEntries.length > 1) {
+    const scored = exactEntries.filter(({ entry }) => entry.score != null)
+    if (scored.length === 1) {
+      const winner = scored[0]
+      const related = exactEntries.every(
+        ({ key }) => key === winner.key || winner.key.startsWith(key) || key.startsWith(winner.key),
+      )
+      if (related) return winner.entry
+    }
+    return undefined
+  }
+  const exact = exactEntries[0]?.entry
   if (exact?.score != null) return exact
 
   const candidates = new Map<string, AAScore>()
@@ -488,6 +504,18 @@ export function lookupScore(
       // ("Beam" -> "Beam 1.0"). "Grok" must not borrow "Grok 4.7".
       if (!keyEndsInDigit && suffix.length < 3 && !suffix.endsWith("0")) continue
       candidates.set(candidate, entry)
+    }
+  }
+  // Some AA entries carry the vendor in the display name ("Tencent Hy4") while
+  // the OpenCode catalog uses the short name ("Hy4"). Accept a vendor-prefixed
+  // exact match too, but only for a known company prefix so unrelated model
+  // families cannot absorb each other's scores.
+  for (const key of keys) {
+    if (key.length < 3) continue
+    for (const [candidate, entry] of Object.entries(index)) {
+      if (candidate.length <= key.length || !candidate.endsWith(key)) continue
+      const prefix = candidate.slice(0, candidate.length - key.length)
+      if (COMPANY_AGGREGATES.has(prefix)) candidates.set(candidate, entry)
     }
   }
   // Multiple possible siblings are ambiguous: prefer no score over a guess.

@@ -7,6 +7,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- AA scores no longer disappear when the OpenCode model ID and display name
+  resolve to different exact entries. A checkpoint-scored model such as
+  `DeepSeek V4.1 Flash 1017` now uses its scored entry instead of reporting
+  `AA n/a`; two genuinely different scores are still treated as ambiguous.
+- Vendor-prefixed Artificial Analysis names now match their OpenCode short
+  names (for example `Tencent Hy4` -> `Hy4`), without letting unrelated model
+  families absorb each other's scores.
+
 ## [1.1.0] - 2026-11-07
 
 ### Changed

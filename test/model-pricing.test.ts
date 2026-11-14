@@ -398,6 +398,57 @@ test("lookupScore matches by model ID, name, and checkpoint suffix — never sib
   assert.equal(lookupScore(index, "qwen3.8-flash", "Qwen3.8 Flash"), undefined)
 })
 
+test("lookupScore uses a scored checkpoint when ID and display name resolve to different exact entries", () => {
+  // The live page carries an unscored base record ("DeepSeek V4.1 Flash") and
+  // a scored checkpoint record ("DeepSeek V4.1 Flash 1017 (Max)"). OpenCode's
+  // ID normalizes to the base while the display name normalizes to the
+  // checkpoint; the scored entry must win rather than becoming ambiguous.
+  const index = {
+    deepseekv41flash: { score: null, name: "DeepSeek V4.1 Flash" },
+    deepseekv41flash1017: { score: 32.5, name: "DeepSeek V4.1 Flash 1017 (Max)" },
+  }
+  assert.equal(
+    lookupScore(index, "deepseek-v4.1-flash", "DeepSeek V4.1 Flash 1017")?.score,
+    32.5,
+  )
+  // Two genuinely different scores stay ambiguous.
+  const ambiguous = {
+    ...index,
+    deepseekv41flash1018: { score: 40, name: "DeepSeek V4.1 Flash 1018 (Max)" },
+  }
+  assert.equal(
+    lookupScore(
+      ambiguous,
+      "deepseek-v4.1-flash-1017",
+      "DeepSeek V4.1 Flash 1018",
+    ),
+    undefined,
+  )
+  // An unrelated exact name must not donate its score to the other key.
+  assert.equal(
+    lookupScore(
+      {
+        deepseekv41flash: { score: null, name: "DeepSeek V4.1 Flash" },
+        grownmodel: { score: 77.7, name: "Grown Model" },
+      },
+      "deepseek-v4.1-flash",
+      "Grown Model",
+    ),
+    undefined,
+  )
+})
+
+test("lookupScore resolves vendor-prefixed AA names to OpenCode short names", () => {
+  const index = {
+    tencenthy4: { score: 34.6, name: "Tencent Hy4" },
+    tencenthy4preview: { score: null, name: "Tencent Hy4 preview" },
+  }
+  assert.equal(lookupScore(index, "hy4", "Hy4")?.score, 34.6)
+  assert.equal(lookupScore(index, "hy4-preview", "Hy4 preview")?.score, null)
+  // Unrelated families must not borrow a vendor-prefixed score.
+  assert.equal(lookupScore(index, "hy5", "Hy5"), undefined)
+})
+
 test("lookupScore rejects generic-family and multi-candidate suffix matches", () => {
   const grokSibling = {
     grok47: { score: 34.3, name: "Grok 4.7 (Xhigh)" },
