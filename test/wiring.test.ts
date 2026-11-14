@@ -364,7 +364,7 @@ test("the pricing RPC returns an aligned pricing table", async () => {
     assert.match(result.meta, new RegExp(`Source: ${snapshot.source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))
     assert.match(result.meta, /fetched \d{4}-\d{2}-\d{2}/)
     assert.match(result.footnote, /Attribution: https:\/\/artificialanalysis\.ai\//)
-    assert.match(result.footnote, /bundled v5 snapshot/)
+    assert.match(result.footnote, /bundled snapshot/)
 
     // A real table: aligned header, rule, and one row per tier.
     assert.match(text, /^MODEL\s+PROVIDER\s+TIER\s+IN \$\s+OUT \$\s+CACHE R\/W \$\s+AA$/m)

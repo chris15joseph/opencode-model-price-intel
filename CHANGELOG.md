@@ -7,6 +7,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- The Artificial Analysis index version is read from the live payload,
+  including patch releases (`v5.0.1`), instead of assuming `v5.0`. Snapshot
+  fallback merging now requires an exact version match so scores from an older
+  patch are never presented as current.
+- The no-key page source is now the public model leaderboard, which carries the
+  complete scored-variant dataset (a superset of the model-list page). The
+  bundled snapshot was regenerated at v5.0.1 (captured 2026-11-14). The score
+  cache key was bumped so existing v5.0 caches are refreshed immediately.
+
 ### Fixed
 
 - AA scores no longer disappear when the OpenCode model ID and display name
@@ -16,6 +27,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Vendor-prefixed Artificial Analysis names now match their OpenCode short
   names (for example `Tencent Hy4` -> `Hy4`), without letting unrelated model
   families absorb each other's scores.
+- Snapshot regeneration now refreshes existing entries from the current index
+  version and turns previously scored entries into `null` when AA no longer
+  scores them, rather than retaining stale scores.
 
 ## [1.1.0] - 2026-11-07
 

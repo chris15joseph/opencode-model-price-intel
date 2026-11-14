@@ -33,6 +33,7 @@ import {
   AA_SNAPSHOT,
   AA_SNAPSHOT_ALIASES,
   AA_SNAPSHOT_CAPTURED_AT,
+  AA_SNAPSHOT_DATE,
   AA_SNAPSHOT_VERSION,
   type AAScore,
 } from "../src/aa-snapshot.ts"
@@ -63,7 +64,7 @@ function fakeFetch(handler: (url: string, init?: RequestInit) => Response | Prom
 function apiBody(data: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     tier: "free",
-    intelligence_index_version: 5,
+    intelligence_index_version: "5.0.1",
     pagination: { page: 1, page_size: 200, total_pages: 1, has_more: false },
     data,
     ...overrides,
@@ -293,9 +294,16 @@ test("parseAARecords filters company aggregate rows", () => {
   )
 })
 
-test("page version is parsed when present, otherwise assumed 5.0", async () => {
+test("page version is parsed when present, otherwise uses the bundled version", async () => {
   assert.equal(parsePageVersion('{"intelligenceIndexVersion":5.1}'), "5.1")
   assert.equal(parsePageVersion('{"intelligence_index_version":"v5.0"}'), "5.0")
+  assert.equal(parsePageVersion('{"intelligenceIndexVersion":"5.0.1"}'), "5.0.1")
+  assert.equal(parsePageVersion("Artificial Analysis Intelligence Index v5.0.1"), "5.0.1")
+  assert.equal(parsePageVersion("Intelligence Index v5.0.1 includes: AA-Briefcase"), "5.0.1")
+  assert.equal(
+    parsePageVersion('{"name":"Artificial Analysis Intelligence Index v5.0.1"}'),
+    "5.0.1",
+  )
   assert.equal(parsePageVersion("no version here"), undefined)
 
   const decoded = `{"intelligenceIndexVersion":5.1}\n${JSON.stringify(modelRecord())}`
@@ -305,11 +313,11 @@ test("page version is parsed when present, otherwise assumed 5.0", async () => {
   assert.equal(explicit.records[0].score, 42.5)
 
   const assumed = await fetchFromPages(fakeFetch(() => pageResponse(JSON.stringify(modelRecord()))))
-  assert.equal(assumed.version, "5.0")
+  assert.equal(assumed.version, AA_SNAPSHOT_VERSION)
   assert.equal(assumed.versionAssumed, true)
 })
 
-test("page fallback uses only the model-list page", async () => {
+test("page fallback uses only the public leaderboard page", async () => {
   const urls: string[] = []
   const fetchImpl = fakeFetch((url) => {
     urls.push(url)
@@ -318,8 +326,8 @@ test("page fallback uses only the model-list page", async () => {
   })
   const result = await fetchAAScores({ fetchImpl, log: () => {}, retryDelayMs: 0 })
   assert.deepEqual(urls, [AA_MODELS_URL])
-  assert.match(result.source, /model pages/)
-  assert.match(result.source, /assumed 5\.0/)
+  assert.match(result.source, /leaderboard page/)
+  assert.match(result.source, new RegExp(`assumed ${AA_SNAPSHOT_VERSION.replaceAll(".", "\\.")}`))
   assert.equal(lookupScore(result.scores, "page-model", "Page Model")?.score, 42.5)
 })
 
@@ -510,8 +518,8 @@ test("snapshot provenance keeps its capture date, version and frozen copy", () =
   const snapshot = snapshotScores()
   assert.equal(snapshot.version, AA_SNAPSHOT_VERSION)
   assert.equal(snapshot.fetchedAt, AA_SNAPSHOT_CAPTURED_AT)
-  assert.ok(Date.parse(snapshot.fetchedAt) < Date.now() - 24 * 60 * 60 * 1_000)
-  assert.match(snapshot.source, /2026-10-31/)
+  assert.ok(Date.parse(snapshot.fetchedAt) <= Date.now())
+  assert.match(snapshot.source, new RegExp(AA_SNAPSHOT_DATE))
   assert.notEqual(snapshot.scores, snapshotScores().scores)
   assert.ok(Object.isFrozen(snapshot.scores))
   assert.ok(Object.isFrozen(snapshot.scores.glm53))
@@ -552,7 +560,7 @@ test("snapshot keys are canonical and aliases are documented", () => {
   )
   assert.equal(
     lookupScore(aliases, "muse-wonder-1.0", "Muse Wonder")?.score,
-    43.3248225998431,
+    43.5748225998431,
   )
 })
 
@@ -562,8 +570,8 @@ test("snapshot fallback covers the catalog", () => {
   const near = (actual: number | null | undefined, expected: number) =>
     assert.ok(Math.abs((actual ?? NaN) - expected) < 0.1, `${actual} !~= ${expected}`)
   near(lookupScore(snapshot.scores, "gpt-6-astra", "GPT 6 Astra")?.score, 56.9)
-  near(lookupScore(snapshot.scores, "claude-opus-5-5", "Claude Opus 5.5")?.score, 58.4)
-  near(lookupScore(snapshot.scores, "kimi-k3.1-pro", "Kimi K3.1 Pro")?.score, 46.0)
+  near(lookupScore(snapshot.scores, "claude-opus-5-5", "Claude Opus 5.5")?.score, 59.1)
+  near(lookupScore(snapshot.scores, "kimi-k3.1-pro", "Kimi K3.1 Pro")?.score, 46.5)
   assert.equal(lookupScore(snapshot.scores, "kimi-k3", "Kimi K3")?.score, null)
   const flash = lookupScore(snapshot.scores, "glm-5.3-flash", "GLM-5.3-Flash")
   assert.ok(flash?.score != null && Math.abs(flash.score - 27.8) < 0.1)
@@ -585,7 +593,7 @@ test("withSnapshotFallback fills gaps live data does not cover", () => {
   assert.match(argon.note ?? "", /snapshot/)
 })
 
-test("snapshot scores are merged only within the same major version", () => {
+test("snapshot scores are merged only for the same index version", () => {
   const live = {
     liveonly: { score: 1, name: "Live Only" },
     glm53: { score: null, name: "GLM-5.3 (Max)" },
@@ -595,9 +603,15 @@ test("snapshot scores are merged only within the same major version", () => {
   assert.equal(v6["glm53flash"], undefined)
   assert.equal(v6.liveonly.score, 1)
 
-  const v51 = withSnapshotFallback(live, "5.1")
-  assert.ok(v51["glm53flash"].score != null)
-  assert.match(v51["glm53flash"].note ?? "", /snapshot/)
+  const olderPatch = withSnapshotFallback(live, "5.0")
+  assert.equal(olderPatch["glm53flash"], undefined)
+
+  const newerPatch = withSnapshotFallback(live, "5.0.2")
+  assert.equal(newerPatch["glm53flash"], undefined)
+
+  const same = withSnapshotFallback(live, AA_SNAPSHOT_VERSION)
+  assert.ok(same["glm53flash"].score != null)
+  assert.match(same["glm53flash"].note ?? "", /snapshot/)
 
   const defaulted = withSnapshotFallback(live)
   assert.ok(defaulted["glm53flash"].score != null)
@@ -640,7 +654,7 @@ test("AA API uses the Free endpoint, validates data, and coerces numeric strings
   assert.equal(calls.length, 1)
   assert.match(calls[0].url, /\/api\/v2\/language\/models\/free\?page=1$/)
   assert.equal((calls[0].init?.headers as Record<string, string>)["x-api-key"], "free-key")
-  assert.equal(result.version, "5.0")
+  assert.equal(result.version, "5.0.1")
   assert.equal(result.source, "artificialanalysis.ai Data API")
   assert.equal(lookupScore(result.scores, "test-model", "Test Model")?.score, 55.5)
   assert.equal(lookupScore(result.scores, "bad-model", "Bad Model")?.score, null)
@@ -650,13 +664,16 @@ test("AA API uses the Free endpoint, validates data, and coerces numeric strings
   assert.equal(result.coverage?.total, (result.coverage?.live ?? 0) + (result.coverage?.snapshot ?? 0))
 })
 
-test("AA API normalizes version numbers and strings to major.minor", () => {
+test("AA API normalizes version numbers and strings, including patch versions", () => {
   assert.equal(normalizeVersion(5), "5.0")
   assert.equal(normalizeVersion(5.1), "5.1")
   assert.equal(normalizeVersion("5"), "5.0")
   assert.equal(normalizeVersion("v5"), "5.0")
+  assert.equal(normalizeVersion("5.0.1"), "5.0.1")
+  assert.equal(normalizeVersion("v5.0.1"), "5.0.1")
   assert.equal(normalizeVersion("6.2"), "6.2")
-  assert.equal(normalizeVersion(undefined), "5.0")
+  assert.equal(normalizeVersion("6.2.3"), "6.2.3")
+  assert.equal(normalizeVersion(undefined), AA_SNAPSHOT_VERSION)
 })
 
 test("AA API honors has_more/total_pages/next and stops when done", async () => {
@@ -762,9 +779,43 @@ test("a failing API logs clearly and falls back to the page", async () => {
     return pageResponse(JSON.stringify(modelRecord()))
   })
   const result = await fetchAAScores({ apiKey: "key", fetchImpl, retryDelayMs: 0, log: (line) => logs.push(line) })
-  assert.match(result.source, /model pages/)
+  assert.match(result.source, /leaderboard page/)
   assert.equal(lookupScore(result.scores, "page-model", "Page Model")?.score, 42.5)
   assert.ok(logs.some((line) => /AA API failed/.test(line) && /403/.test(line)))
+})
+
+test("an older API version does not override the newer leaderboard version", async () => {
+  const logs: string[] = []
+  const fetchImpl = fakeFetch((url) => {
+    if (url.includes("/api/v2/")) {
+      return jsonResponse(
+        apiBody(
+          [
+            {
+              id: "1",
+              slug: "old-model",
+              name: "Old Model (Max)",
+              evaluations: { artificial_analysis_intelligence_index: 10 },
+            },
+          ],
+          { intelligence_index_version: "5.0" },
+        ),
+      )
+    }
+    return pageResponse(
+      `{"intelligenceIndexVersion":"5.0.1"}\n${JSON.stringify(modelRecord())}`,
+    )
+  })
+  const result = await fetchAAScores({
+    apiKey: "key",
+    fetchImpl,
+    retryDelayMs: 0,
+    log: (line) => logs.push(line),
+  })
+  assert.equal(result.version, "5.0.1")
+  assert.match(result.source, /leaderboard page/)
+  assert.equal(lookupScore(result.scores, "page-model", "Page Model")?.score, 42.5)
+  assert.ok(logs.some((line) => /older than the latest known/.test(line)))
 })
 
 test("a stalled API does not leave the page fallback with an aborted signal", async () => {
@@ -795,11 +846,11 @@ test("a stalled API does not leave the page fallback with an aborted signal", as
     log: () => {},
   })
   assert.equal(pageSignalAborted, false)
-  assert.match(result.source, /model pages/)
+  assert.match(result.source, /leaderboard page/)
   assert.equal(lookupScore(result.scores, "page-model", "Page Model")?.score, 42.5)
 })
 
-test("a live v6 result never contains unlabeled v5 snapshot scores", async () => {
+test("a live v6 result never contains unlabeled snapshot scores", async () => {
   const fetchImpl = fakeFetch(() =>
     jsonResponse({
       tier: "free",

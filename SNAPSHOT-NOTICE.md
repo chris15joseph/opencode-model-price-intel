@@ -1,15 +1,16 @@
 # Artificial Analysis snapshot — provenance and attribution
 
 `src/aa-snapshot.ts` is a bundled fallback copy of the Artificial Analysis
-Intelligence Index. It is used only when both live sources fail, and only when
-the live index version has the same major version.
+Intelligence Index. It is used as the full fallback when both live sources
+fail. When live data is available, snapshot entries fill gaps only when the
+live index version exactly matches the snapshot's version.
 
 | Field | Value |
 | --- | --- |
 | Index | Artificial Analysis Intelligence Index |
-| Version | 5.0 (major.minor; patch releases are not part of the version) |
-| Captured | 2026-10-31 |
-| Primary source | <https://artificialanalysis.ai/models> |
+| Version | 5.0.1 (major.minor.patch; patch releases can change scores) |
+| Captured | 2026-11-14 |
+| Primary source | <https://artificialanalysis.ai/leaderboards/models> |
 | Free API endpoint | <https://artificialanalysis.ai/api/v2/language/models/free> |
 | Attribution | <https://artificialanalysis.ai/> |
 
@@ -24,9 +25,12 @@ plugin README, `NOTICE`, and this file carry the same attribution.
 - OpenCode catalog IDs whose digit order differs from the AA display name are
   listed in `AA_SNAPSHOT_ALIASES` in `src/aa-snapshot.ts`:
   `claude-haiku-4-5 -> claude45haiku`, `claude-sonnet-4-5 -> claude45sonnet`,
-  and `muse-wonder-1.0 -> musewonder`.
-- Scores are only comparable within the same **major** index version. Live v6
-  results are not merged with this v5 snapshot.
+  `deepseek-v4-pro -> deepseekv4pro0813`,
+  `muse-wonder-1.0 -> musewonder`, and
+  `nemotron-3-ultra -> nemotron3ultra550ba55b`.
+- Scores are only comparable within the same **index version**. Live results
+  from a different version (including a patch release such as v5.0.1) are not
+  merged with this snapshot.
 - `snapshotScores().fetchedAt` is the capture date above, never the current
   time. Snapshot-derived entries carry a `[snapshot]` note.
 - Coverage (live vs snapshot numeric scores) is returned as
@@ -38,16 +42,16 @@ plugin README, `NOTICE`, and this file carry the same attribution.
 # Full list via the Free API (preferred; requires a valid key)
 ARTIFICIALANALYSIS_API_KEY=... node scripts/regenerate-snapshot.ts
 
-# Partial fallback from the public model-list page (no key; retains old entries)
+# Fallback from the public leaderboard page (no key)
 node scripts/regenerate-snapshot.ts --from-page
 ```
 
-The script rewrites `src/aa-snapshot.ts`, preserves existing notes for entries
-whose AA name is unchanged, keeps documented aliases whose targets still exist,
-and refuses to overwrite the snapshot when the live source returns no records.
-Review the diff and run `node --test test/` before committing. Do not commit a
-snapshot whose version is a new major release without updating the README's
-version note.
+The script rewrites `src/aa-snapshot.ts`, refreshes existing entries from the
+current index version, keeps documented aliases whose targets still exist, and
+refuses to overwrite the snapshot when the live source returns no records.
+Previously scored entries that the current version no longer scores become
+`null` rather than carrying a stale number. Review the diff and run `npm test`
+before committing.
 
 ## Test fixtures
 

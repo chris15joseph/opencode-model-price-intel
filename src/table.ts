@@ -62,7 +62,7 @@ export const DEFAULT_TABLE_WIDTH = 108
 
 const TITLE = "Model pricing & Artificial Analysis Intelligence Index"
 const FOOTNOTE =
-  "AA: * bundled v5 snapshot; ~ other match note (variant or entry name). Attribution: https://artificialanalysis.ai/"
+  "AA: * bundled snapshot; ~ other match note (variant or entry name). Attribution: https://artificialanalysis.ai/"
 const COLUMN_GAP = "  "
 
 interface Column {

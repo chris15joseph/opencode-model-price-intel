@@ -43,7 +43,7 @@ import { pricingSegment, type CostFormat } from "./pricing.ts"
 import { ModelPricing } from "./rpc.ts"
 import { pricingData, renderTable, type TableModel } from "./table.ts"
 
-const CACHE_KEY = "aa-scores/v3"
+const CACHE_KEY = "aa-scores/v4"
 const DEFAULT_REFRESH_HOURS = 12
 const MIN_REFRESH_HOURS = 1
 /** 596 h stays below the 2^31-1 ms setTimeout/setInterval ceiling. */

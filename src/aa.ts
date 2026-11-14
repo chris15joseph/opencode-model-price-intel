@@ -2,9 +2,10 @@
  * Live Artificial Analysis Intelligence Index fetcher.
  *
  * Scores change as Artificial Analysis publishes new evaluations (the index is
- * versioned — currently v5.0), so this runs whenever the plugin refreshes,
- * with a cached copy kept in plugin storage and periodic refresh while the
- * session is open.
+ * versioned — v5.0.1 at the time of writing), so this runs whenever the plugin
+ * refreshes, with a cached copy kept in plugin storage and periodic refresh
+ * while the session is open. The version is read from the live payload rather
+ * than pinned, so a new release is adopted automatically.
  *
  * Two sources, in order:
  *
@@ -15,12 +16,14 @@
  *    accepts any valid key (Free, Pro or Commercial). Attribution:
  *    https://artificialanalysis.ai/
  *
- * 2. The public model-list page (https://artificialanalysis.ai/models), whose
- *    embedded dataset (`initialModels` records in the RSC payload) carries the
- *    `intelligenceIndex` score per model variant. Requires no key.
+ * 2. The public model leaderboard page
+ *    (https://artificialanalysis.ai/leaderboards/models), whose embedded
+ *    dataset carries the `intelligenceIndex` score per model variant. It is a
+ *    superset of the model-list page and publishes the current index version.
+ *    Requires no key.
  *
  * The bundled snapshot in `aa-snapshot.ts` is only used when both fail, and
- * only when its major index version matches the live data.
+ * only when its index version exactly matches the live data.
  */
 
 import {
@@ -33,7 +36,7 @@ import {
   type AAScore,
 } from "./aa-snapshot.ts"
 
-export const AA_MODELS_URL = "https://artificialanalysis.ai/models"
+export const AA_MODELS_URL = "https://artificialanalysis.ai/leaderboards/models"
 /** Free-tier endpoint: accepts any valid API key; Pro-only route is not needed. */
 export const AA_API_URL = "https://artificialanalysis.ai/api/v2/language/models/free"
 /** Hard safety cap on API pagination (the Free quota is 100 requests/day). */
@@ -90,7 +93,7 @@ export interface AAAPIFetch {
 export interface AAPageFetch {
   records: AARecord[]
   version: string
-  /** True when the page did not publish a version and 5.0 was assumed. */
+  /** True when the page did not publish a version and the bundled version was assumed. */
   versionAssumed: boolean
 }
 
@@ -144,15 +147,17 @@ function finiteNonNegative(value: unknown): number | null {
   return Number.isFinite(number) && number >= 0 ? number : null
 }
 
-/** Normalize AA's numeric (`5` / `5.1`) or string (`"5.0"`, `"v5"`) version. */
+/** Normalize AA's numeric (`5` / `5.1`) or string (`"5.0"`, `"v5"`, `"5.0.1"`) version. */
 export function normalizeVersion(value: unknown, fallback = AA_INDEX_VERSION): string {
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
     const text = String(value)
     return text.includes(".") ? text : `${text}.0`
   }
   if (typeof value === "string") {
-    const match = value.trim().match(/^v?(\d+)(?:\.(\d+))?/i)
-    if (match) return `${match[1]}.${match[2] ?? "0"}`
+    const match = value.trim().match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/i)
+    if (match) {
+      return `${match[1]}.${match[2] ?? "0"}${match[3] !== undefined ? `.${match[3]}` : ""}`
+    }
   }
   return fallback
 }
@@ -160,12 +165,8 @@ export function normalizeVersion(value: unknown, fallback = AA_INDEX_VERSION): s
 function optionalVersion(value: unknown): string | undefined {
   if (value === undefined || value === null || value === "") return undefined
   if (typeof value === "number" && (!Number.isFinite(value) || value < 0)) return undefined
-  if (typeof value === "string" && !/^v?\d+(?:\.\d+)?/i.test(value.trim())) return undefined
+  if (typeof value === "string" && !/^v?\d+(?:\.\d+){0,2}/i.test(value.trim())) return undefined
   return normalizeVersion(value)
-}
-
-function majorOf(version: string): string {
-  return version.split(".")[0] ?? version
 }
 
 function countNumericScores(scores: Readonly<Record<string, AAScore>>): number {
@@ -174,12 +175,24 @@ function countNumericScores(scores: Readonly<Record<string, AAScore>>): number {
   return count
 }
 
+/** Compare normalized index versions segment by segment (`5.0.1` > `5.0`). */
+function compareVersions(a: string, b: string): number {
+  const left = normalizeVersion(a).split(".").map(Number)
+  const right = normalizeVersion(b).split(".").map(Number)
+  const length = Math.max(left.length, right.length)
+  for (let index = 0; index < length; index++) {
+    const difference = (left[index] ?? 0) - (right[index] ?? 0)
+    if (difference !== 0) return difference
+  }
+  return 0
+}
+
 // ------------------------------------------------------------------ page
 
 /**
  * Company aggregate rows on AA's evaluations pages are shaped like model
- * records. The fallback only reads the model-list page, but filter these
- * explicitly as a second line of defence.
+ * records. The shared parser filters these explicitly as a second line of
+ * defence.
  */
 const COMPANY_AGGREGATES = new Set([
   "google",
@@ -338,9 +351,14 @@ export function parseAARecords(payload: string): AARecord[] {
 export function parsePageVersion(payload: string): string | undefined {
   const decoded = payload.includes("self.__next_f.push") ? decodeRSC(payload) : payload
   const patterns = [
-    /"intelligenceIndexVersion"\s*:\s*"?v?(\d+(?:\.\d+)?)"?/i,
-    /"intelligence_index_version"\s*:\s*"?v?(\d+(?:\.\d+)?)"?/i,
-    /"indexVersion"\s*:\s*"?v?(\d+(?:\.\d+)?)"?/i,
+    /"intelligenceIndexVersion"\s*:\s*"?v?(\d+(?:\.\d+){0,2})"?/i,
+    /"intelligence_index_version"\s*:\s*"?v?(\d+(?:\.\d+){0,2})"?/i,
+    /"indexVersion"\s*:\s*"?v?(\d+(?:\.\d+){0,2})"?/i,
+    // Rendered copy and JSON-LD metadata say "Artificial Analysis
+    // Intelligence Index v5.0.1"; use it when no machine-readable version key
+    // is present.
+    /Artificial Analysis Intelligence Index\s+v?(\d+(?:\.\d+){0,2})/i,
+    /Intelligence Index\s+v(\d+(?:\.\d+){0,2})/i,
   ]
   for (const pattern of patterns) {
     const match = decoded.match(pattern)
@@ -563,7 +581,7 @@ function mergeWithSnapshot(
   let live = 0
   for (const entry of Object.values(index)) if (entry.score != null) live++
   let snapshot = 0
-  if (majorOf(version) === majorOf(AA_SNAPSHOT_VERSION)) {
+  if (normalizeVersion(version) === normalizeVersion(AA_SNAPSHOT_VERSION)) {
     for (const [key, entry] of Object.entries(snapshotIndex())) {
       const existing = merged[key]
       if (existing?.score != null) continue
@@ -581,8 +599,10 @@ function mergeWithSnapshot(
 
 /**
  * Use the bundled snapshot to fill gaps the live data does not cover, but only
- * when the live index has the same major version. Live non-null scores always
- * win; snapshot-derived entries carry a `[snapshot]` note.
+ * when the live index is exactly the snapshot's version. Scores change between
+ * index updates (including patch releases), so older snapshot values must not
+ * be presented as current. Live non-null scores always win; snapshot-derived
+ * entries carry a `[snapshot]` note.
  */
 export function withSnapshotFallback(
   index: Readonly<Record<string, AAScore>>,
@@ -827,9 +847,10 @@ export async function fetchFromAPI(
 }
 
 /**
- * Scrape the embedded dataset from the public model-list page (no key needed).
- * Only the model-list page is used: the evaluations page contains company
- * aggregate rows and must never be treated as a model source.
+ * Scrape the embedded dataset from the public model leaderboard page (no key
+ * needed). The leaderboard is a superset of the model-list page: it carries
+ * every scored variant and the current index version. Company aggregate rows
+ * are filtered during parsing.
  */
 export async function fetchFromPages(
   fetchImpl: typeof fetch = fetch,
@@ -841,7 +862,7 @@ export async function fetchFromPages(
     retryDelayMs: options?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS,
   }
   const response = await fetchWithRetry(fetchImpl, AA_MODELS_URL, {}, settings)
-  if (!response.ok) throw new Error(`Artificial Analysis model page returned ${response.status}`)
+  if (!response.ok) throw new Error(`Artificial Analysis leaderboard page returned ${response.status}`)
   const html = await response.text()
   const decoded = decodeRSC(html)
   const records = parseAARecords(decoded)
@@ -855,9 +876,9 @@ export async function fetchFromPages(
 
 /**
  * Fetch current Intelligence Index scores. Tries the Free API when a key is
- * configured, then the public model-list page, then falls back to the bundled
+ * configured, then the public leaderboard page, then falls back to the bundled
  * snapshot. Every source completes before the snapshot is used, so a stalled
- * API cannot consume the page fallback's abort budget.
+ * API cannot consume the leaderboard fallback's abort budget.
  */
 export async function fetchAAScores(options?: AAFetchOptions): Promise<AAFetched> {
   const fetchImpl = options?.fetchImpl ?? fetch
@@ -872,7 +893,7 @@ export async function fetchAAScores(options?: AAFetchOptions): Promise<AAFetched
   if (apiKey) {
     try {
       const { records, version, pages } = await fetchFromAPI(apiKey, fetchImpl, settings)
-      if (records.length > 0) {
+      if (records.length > 0 && compareVersions(version, AA_INDEX_VERSION) >= 0) {
         const { scores, coverage } = mergeWithSnapshot(indexRecords(records), version)
         log(
           `[model-price-intel] AA API (${pages} page${pages === 1 ? "" : "s"}): ${coverage.live} live + ${coverage.snapshot} snapshot scores`,
@@ -885,10 +906,16 @@ export async function fetchAAScores(options?: AAFetchOptions): Promise<AAFetched
           coverage,
         }
       }
-      log("[model-price-intel] AA API returned no usable model records; falling back to the model page")
+      if (records.length > 0) {
+        log(
+          `[model-price-intel] AA API returned v${version}, older than the latest known v${AA_INDEX_VERSION}; falling back to the leaderboard page`,
+        )
+      } else {
+        log("[model-price-intel] AA API returned no usable model records; falling back to the leaderboard page")
+      }
     } catch (error) {
       log(
-        `[model-price-intel] AA API failed (${error instanceof Error ? error.message : String(error)}); falling back to the model page`,
+        `[model-price-intel] AA API failed (${error instanceof Error ? error.message : String(error)}); falling back to the leaderboard page`,
       )
     }
   }
@@ -898,10 +925,10 @@ export async function fetchAAScores(options?: AAFetchOptions): Promise<AAFetched
     if (page.records.length > 0) {
       const { scores, coverage } = mergeWithSnapshot(indexRecords(page.records), page.version)
       const source = page.versionAssumed
-        ? `artificialanalysis.ai model pages; assumed ${page.version} (page)`
-        : "artificialanalysis.ai model pages"
+        ? `artificialanalysis.ai leaderboard page; assumed ${page.version}`
+        : "artificialanalysis.ai leaderboard page"
       log(
-        `[model-price-intel] AA model page (v${page.version}${page.versionAssumed ? " assumed" : ""}): ${coverage.live} live + ${coverage.snapshot} snapshot scores`,
+        `[model-price-intel] AA leaderboard page (v${page.version}${page.versionAssumed ? " assumed" : ""}): ${coverage.live} live + ${coverage.snapshot} snapshot scores`,
       )
       return {
         scores,
@@ -911,10 +938,10 @@ export async function fetchAAScores(options?: AAFetchOptions): Promise<AAFetched
         coverage,
       }
     }
-    log("[model-price-intel] AA model page contained no model records")
+    log("[model-price-intel] AA leaderboard page contained no model records")
   } catch (error) {
     log(
-      `[model-price-intel] AA model page failed (${error instanceof Error ? error.message : String(error)}); using bundled snapshot`,
+      `[model-price-intel] AA leaderboard page failed (${error instanceof Error ? error.message : String(error)}); using bundled snapshot`,
     )
   }
 
